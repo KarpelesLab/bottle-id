@@ -220,10 +220,14 @@
 
         <dl newline="true">
           <dt>Type</dt>
-          <dd>Recipient type (currently only type 0 is defined).</dd>
+          <dd>Recipient type identifier. Type 0 uses PKIX-encoded public keys
+          and is the only type defined by this specification. Future types
+          MAY define alternative key formats or key agreement protocols.
+          Implementations MUST reject recipients with unrecognized types.</dd>
 
           <dt>Recipient</dt>
-          <dd>Public key of the recipient in PKIX format <xref target="RFC5280"/>.</dd>
+          <dd>Public key of the recipient. For Type 0, this is encoded in
+          PKIX format <xref target="RFC5280"/>.</dd>
 
           <dt>Data</dt>
           <dd>Key material encrypted for this recipient.</dd>
@@ -241,10 +245,14 @@
 
         <dl newline="true">
           <dt>Type</dt>
-          <dd>Signature type (currently only type 0 is defined).</dd>
+          <dd>Signature type identifier. Type 0 uses PKIX-encoded public keys
+          and is the only type defined by this specification. Future types
+          MAY define alternative key formats or signature schemes.
+          Implementations MUST reject signatures with unrecognized types.</dd>
 
           <dt>Signer</dt>
-          <dd>Public key of the signer in PKIX format.</dd>
+          <dd>Public key of the signer. For Type 0, this is encoded in
+          PKIX format <xref target="RFC5280"/>.</dd>
 
           <dt>Data</dt>
           <dd>The signature value.</dd>
@@ -1777,6 +1785,68 @@ Where:
         Required <xref target="RFC8126"/>. Future registrations may define
         additional content encryption algorithms (e.g., AES Key Wrap,
         ChaCha20-Poly1305, KEK derivation schemes).</t>
+      </section>
+
+      <section anchor="iana-recipient-type-registry">
+        <name>MessageRecipient Type Registry</name>
+        <t>IANA is requested to create a new registry called "Bottle
+        MessageRecipient Type Values" with the following initial contents:</t>
+
+        <table anchor="iana-recipient-type-table">
+          <name>MessageRecipient Type Values</name>
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>PKIX</td>
+              <td>PKIX-encoded public key with algorithm-specific encryption</td>
+              <td>This document</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The Type field is encoded as a CBOR integer, which has no upper
+        bound. New assignments in this registry require Specification Required
+        <xref target="RFC8126"/>. Future registrations may define alternative
+        key formats (e.g., raw keys, key IDs) or key agreement protocols.</t>
+      </section>
+
+      <section anchor="iana-signature-type-registry">
+        <name>MessageSignature Type Registry</name>
+        <t>IANA is requested to create a new registry called "Bottle
+        MessageSignature Type Values" with the following initial contents:</t>
+
+        <table anchor="iana-signature-type-table">
+          <name>MessageSignature Type Values</name>
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>PKIX</td>
+              <td>PKIX-encoded public key with algorithm-specific signature</td>
+              <td>This document</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The Type field is encoded as a CBOR integer, which has no upper
+        bound. New assignments in this registry require Specification Required
+        <xref target="RFC8126"/>. Future registrations may define alternative
+        key formats (e.g., raw keys, key IDs) or signature schemes.</t>
       </section>
     </section>
 

@@ -1375,9 +1375,347 @@
       </ul>
     </section>
 
+    <section anchor="algorithms">
+      <name>Algorithm Specifications</name>
+      <t>This section defines the cryptographic algorithms used by the Bottle
+      protocol. The protocol is designed to be algorithm-agile, supporting
+      any algorithm whose public keys can be encoded in PKIX format.</t>
+
+      <section anchor="alg-content-encryption">
+        <name>Content Encryption Algorithms</name>
+        <t>Content encryption in Bottle uses Authenticated Encryption with
+        Associated Data (AEAD) algorithms. The default and RECOMMENDED
+        algorithm is AES-GCM with a 256-bit key.</t>
+
+        <table anchor="aead-algs-table">
+          <name>Content Encryption Algorithms</name>
+          <thead>
+            <tr>
+              <th>Algorithm</th>
+              <th>Key Size</th>
+              <th>Nonce Size</th>
+              <th>Tag Size</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>AES-128-GCM</td>
+              <td>128 bits</td>
+              <td>96 bits</td>
+              <td>128 bits</td>
+              <td>AES-GCM with 128-bit key</td>
+            </tr>
+            <tr>
+              <td>AES-256-GCM</td>
+              <td>256 bits</td>
+              <td>96 bits</td>
+              <td>128 bits</td>
+              <td>AES-GCM with 256-bit key (RECOMMENDED)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The Message field of an encrypted Bottle contains the concatenation
+        of the nonce and the ciphertext (which includes the authentication tag):</t>
+
+        <sourcecode type="ascii-art">
+Message = nonce || ciphertext || tag
+        </sourcecode>
+
+        <t>Where:</t>
+        <ul>
+          <li>nonce: 12 bytes (96 bits) randomly generated for each encryption</li>
+          <li>ciphertext: The encrypted content</li>
+          <li>tag: 16 bytes (128 bits) authentication tag appended by AES-GCM</li>
+        </ul>
+
+        <t>Implementations MUST generate a new random nonce for each encryption
+        operation. Nonce reuse with the same key completely breaks the security
+        of AES-GCM.</t>
+      </section>
+
+      <section anchor="alg-signatures">
+        <name>Signature Algorithms</name>
+        <t>Bottle supports multiple signature algorithms. The signature is
+        computed over the Message field of the Bottle.</t>
+
+        <table anchor="sig-algs-table">
+          <name>Signature Algorithms</name>
+          <thead>
+            <tr>
+              <th>Algorithm</th>
+              <th>Key Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Ed25519</td>
+              <td>Ed25519</td>
+              <td>EdDSA using Curve25519 (RECOMMENDED)</td>
+            </tr>
+            <tr>
+              <td>ECDSA-P256</td>
+              <td>EC P-256</td>
+              <td>ECDSA with NIST P-256 and SHA-256</td>
+            </tr>
+            <tr>
+              <td>ECDSA-P384</td>
+              <td>EC P-384</td>
+              <td>ECDSA with NIST P-384 and SHA-384</td>
+            </tr>
+            <tr>
+              <td>RSA-PSS</td>
+              <td>RSA</td>
+              <td>RSASSA-PSS with SHA-256</td>
+            </tr>
+            <tr>
+              <td>RSA-PKCS1</td>
+              <td>RSA</td>
+              <td>RSASSA-PKCS1-v1_5 with SHA-256</td>
+            </tr>
+            <tr>
+              <td>ML-DSA-65</td>
+              <td>ML-DSA</td>
+              <td>Module-Lattice Digital Signature (Post-Quantum)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <section anchor="alg-sig-input">
+          <name>Signature Input</name>
+          <t>The signature is computed over the raw bytes of the Message field.
+          This means:</t>
+          <ul>
+            <li>For ClearText format: The signature covers the plaintext content</li>
+            <li>For CborBottle/JsonBottle format: The signature covers the
+            serialized inner Bottle</li>
+            <li>For AES format: The signature covers the encrypted ciphertext
+            (nonce || ciphertext || tag)</li>
+          </ul>
+          <t>This design allows signatures to be verified without decryption,
+          enabling use cases where a party can verify message integrity
+          without having access to the decryption keys.</t>
+        </section>
+
+        <section anchor="alg-sig-encoding">
+          <name>Signature Encoding</name>
+          <t>Signature values are encoded as follows:</t>
+          <ul>
+            <li>Ed25519: 64 bytes, raw signature value</li>
+            <li>ECDSA: ASN.1 DER encoding of the (r, s) pair</li>
+            <li>RSA: Raw signature bytes (same length as modulus)</li>
+            <li>ML-DSA: Algorithm-specific encoding per FIPS 204</li>
+          </ul>
+        </section>
+      </section>
+
+      <section anchor="alg-key-encryption">
+        <name>Key Encryption Algorithms</name>
+        <t>When encrypting a Bottle for recipients, the content encryption key
+        (CEK) is encrypted for each recipient using their public key.</t>
+
+        <table anchor="key-enc-algs-table">
+          <name>Key Encryption Algorithms</name>
+          <thead>
+            <tr>
+              <th>Key Type</th>
+              <th>Algorithm</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>RSA</td>
+              <td>RSA-OAEP</td>
+              <td>RSAES-OAEP with SHA-256</td>
+            </tr>
+            <tr>
+              <td>EC (P-256, P-384, P-521)</td>
+              <td>ECDH + AES-GCM</td>
+              <td>ECDH key agreement, SHA-256 hash, AES-GCM encryption</td>
+            </tr>
+            <tr>
+              <td>X25519</td>
+              <td>ECDH + AES-GCM</td>
+              <td>X25519 key agreement, SHA-256 hash, AES-GCM encryption</td>
+            </tr>
+            <tr>
+              <td>Ed25519</td>
+              <td>X25519 + AES-GCM</td>
+              <td>Convert to X25519, then ECDH + AES-GCM</td>
+            </tr>
+            <tr>
+              <td>ML-KEM</td>
+              <td>ML-KEM</td>
+              <td>Module-Lattice Key Encapsulation (Post-Quantum)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <section anchor="alg-rsa-oaep">
+          <name>RSA-OAEP</name>
+          <t>For RSA recipients, the CEK is encrypted directly using RSA-OAEP:</t>
+          <ul>
+            <li>Hash function: SHA-256</li>
+            <li>Mask generation function: MGF1 with SHA-256</li>
+            <li>Label: Empty string</li>
+          </ul>
+          <t>The Data field contains the RSA-OAEP ciphertext directly.</t>
+        </section>
+
+        <section anchor="alg-ecdh-encryption">
+          <name>ECDH Key Encryption</name>
+          <t>For ECDH-based recipients (EC curves, X25519, Ed25519), the
+          following process is used to encrypt the CEK:</t>
+          <ol>
+            <li>Generate an ephemeral key pair on the same curve as the
+            recipient's key</li>
+            <li>Perform ECDH to derive the shared secret Z</li>
+            <li>Compute the encryption key as SHA-256(Z)</li>
+            <li>Generate a random 12-byte nonce</li>
+            <li>Encrypt the CEK using AES-256-GCM with the derived key and nonce</li>
+          </ol>
+          <t>The Data field format is:</t>
+          <sourcecode type="ascii-art">
+Data = version || keylen || ephemeral_pubkey || nonce || ciphertext
+
+Where:
+  version          = 0x00 (1 byte)
+  keylen           = length of ephemeral_pubkey (varint encoding)
+  ephemeral_pubkey = PKIX-encoded ephemeral public key
+  nonce            = 12 bytes random nonce
+  ciphertext       = AES-GCM encrypted CEK (includes auth tag)
+          </sourcecode>
+          <t>For Ed25519 recipient keys, the public key is first converted to
+          X25519 format using the standard birational map before performing
+          the ECDH operation.</t>
+        </section>
+
+        <section anchor="alg-mlkem">
+          <name>ML-KEM Key Encryption</name>
+          <t>For ML-KEM recipients (post-quantum), the Key Encapsulation
+          Mechanism is used directly. The Data field contains the ML-KEM
+          ciphertext that encapsulates the CEK.</t>
+        </section>
+      </section>
+    </section>
+
     <section anchor="IANA">
       <name>IANA Considerations</name>
-      <t>This memo includes no request to IANA.</t>
+      <t>This document requests the following IANA registrations.</t>
+
+      <section anchor="iana-media-types">
+        <name>Media Type Registrations</name>
+        <t>This section registers the "application/bottle+cbor" and
+        "application/bottle+json" media types in the "Media Types" registry.</t>
+
+        <section anchor="iana-media-cbor">
+          <name>application/bottle+cbor</name>
+          <dl>
+            <dt>Type name:</dt>
+            <dd>application</dd>
+            <dt>Subtype name:</dt>
+            <dd>bottle+cbor</dd>
+            <dt>Required parameters:</dt>
+            <dd>N/A</dd>
+            <dt>Optional parameters:</dt>
+            <dd>N/A</dd>
+            <dt>Encoding considerations:</dt>
+            <dd>binary (CBOR)</dd>
+            <dt>Security considerations:</dt>
+            <dd>See Security Considerations section of this document</dd>
+            <dt>Interoperability considerations:</dt>
+            <dd>N/A</dd>
+            <dt>Published specification:</dt>
+            <dd>This document</dd>
+            <dt>Applications that use this media type:</dt>
+            <dd>Applications that require secure message encapsulation with
+            support for encryption and signatures</dd>
+            <dt>Fragment identifier considerations:</dt>
+            <dd>N/A</dd>
+            <dt>Person &amp; email address to contact for further information:</dt>
+            <dd>Mark Karpelès &lt;mark@klb.jp&gt;</dd>
+            <dt>Intended usage:</dt>
+            <dd>COMMON</dd>
+            <dt>Restrictions on usage:</dt>
+            <dd>N/A</dd>
+            <dt>Author/Change controller:</dt>
+            <dd>IETF</dd>
+          </dl>
+        </section>
+
+        <section anchor="iana-media-json">
+          <name>application/bottle+json</name>
+          <dl>
+            <dt>Type name:</dt>
+            <dd>application</dd>
+            <dt>Subtype name:</dt>
+            <dd>bottle+json</dd>
+            <dt>Required parameters:</dt>
+            <dd>N/A</dd>
+            <dt>Optional parameters:</dt>
+            <dd>N/A</dd>
+            <dt>Encoding considerations:</dt>
+            <dd>8bit (JSON)</dd>
+            <dt>Security considerations:</dt>
+            <dd>See Security Considerations section of this document</dd>
+            <dt>Interoperability considerations:</dt>
+            <dd>N/A</dd>
+            <dt>Published specification:</dt>
+            <dd>This document</dd>
+            <dt>Applications that use this media type:</dt>
+            <dd>Applications that require secure message encapsulation with
+            support for encryption and signatures in web environments</dd>
+            <dt>Fragment identifier considerations:</dt>
+            <dd>N/A</dd>
+            <dt>Person &amp; email address to contact for further information:</dt>
+            <dd>Mark Karpelès &lt;mark@klb.jp&gt;</dd>
+            <dt>Intended usage:</dt>
+            <dd>COMMON</dd>
+            <dt>Restrictions on usage:</dt>
+            <dd>N/A</dd>
+            <dt>Author/Change controller:</dt>
+            <dd>IETF</dd>
+          </dl>
+        </section>
+
+        <section anchor="iana-media-idcard">
+          <name>application/idcard+cbor</name>
+          <dl>
+            <dt>Type name:</dt>
+            <dd>application</dd>
+            <dt>Subtype name:</dt>
+            <dd>idcard+cbor</dd>
+            <dt>Required parameters:</dt>
+            <dd>N/A</dd>
+            <dt>Optional parameters:</dt>
+            <dd>N/A</dd>
+            <dt>Encoding considerations:</dt>
+            <dd>binary (CBOR)</dd>
+            <dt>Security considerations:</dt>
+            <dd>See Security Considerations section of this document</dd>
+            <dt>Interoperability considerations:</dt>
+            <dd>N/A</dd>
+            <dt>Published specification:</dt>
+            <dd>This document</dd>
+            <dt>Applications that use this media type:</dt>
+            <dd>Applications that require cryptographic identity management
+            with purpose-specific keys</dd>
+            <dt>Fragment identifier considerations:</dt>
+            <dd>N/A</dd>
+            <dt>Person &amp; email address to contact for further information:</dt>
+            <dd>Mark Karpelès &lt;mark@klb.jp&gt;</dd>
+            <dt>Intended usage:</dt>
+            <dd>COMMON</dd>
+            <dt>Restrictions on usage:</dt>
+            <dd>N/A</dd>
+            <dt>Author/Change controller:</dt>
+            <dd>IETF</dd>
+          </dl>
+        </section>
+      </section>
     </section>
 
     <section anchor="Security">
@@ -1525,6 +1863,165 @@
 
       </references>
     </references>
+
+    <section anchor="examples">
+      <name>Examples</name>
+      <t>This appendix provides examples of Bottle and IDCard structures in
+      CBOR diagnostic notation.</t>
+
+      <section anchor="example-cleartext">
+        <name>Cleartext Bottle</name>
+        <t>A simple Bottle containing cleartext "Hello, World!":</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {},                         / Header (empty) /
+  h'48656c6c6f2c20576f726c6421', / Message: "Hello, World!" /
+  0,                          / Format: ClearText /
+  [],                         / Recipients (empty) /
+  []                          / Signatures (empty) /
+]
+        ]]></sourcecode>
+      </section>
+
+      <section anchor="example-signed">
+        <name>Signed Bottle</name>
+        <t>A Bottle with a single Ed25519 signature:</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {},                         / Header (empty) /
+  h'48656c6c6f2c20576f726c6421', / Message: "Hello, World!" /
+  0,                          / Format: ClearText /
+  [],                         / Recipients (empty) /
+  [                           / Signatures /
+    [
+      0,                      / Type: default /
+      h'302a3005...',         / Signer: Ed25519 public key (PKIX) /
+      h'a1b2c3d4...'          / Signature value (64 bytes) /
+    ]
+  ]
+]
+        ]]></sourcecode>
+      </section>
+
+      <section anchor="example-encrypted">
+        <name>Encrypted Bottle</name>
+        <t>A Bottle encrypted for a single recipient:</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {},                         / Header (empty) /
+  h'random_nonce_12_bytes...' / Message: nonce || ciphertext || tag /
+    || h'encrypted_content...'
+    || h'auth_tag_16_bytes',
+  2,                          / Format: AES /
+  [                           / Recipients /
+    [
+      0,                      / Type: default /
+      h'3082...',             / Recipient public key (PKIX) /
+      h'wrapped_cek...'       / Encrypted CEK /
+    ]
+  ],
+  []                          / Signatures (empty) /
+]
+        ]]></sourcecode>
+      </section>
+
+      <section anchor="example-nested">
+        <name>Nested Bottle (Sign-then-Encrypt)</name>
+        <t>To create a signed-then-encrypted message:</t>
+        <ol>
+          <li>Create a Bottle with cleartext content</li>
+          <li>Sign the Bottle</li>
+          <li>Bottle up (nest) the signed Bottle</li>
+          <li>Encrypt the outer Bottle</li>
+        </ol>
+        <t>The resulting structure (outer Bottle):</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {},                         / Header (empty) /
+  h'nonce...'                 / Message: encrypted inner Bottle /
+    || h'encrypted_cbor_bottle...'
+    || h'auth_tag...',
+  2,                          / Format: AES /
+  [                           / Recipients /
+    [0, h'recipient_pubkey...', h'wrapped_cek...']
+  ],
+  []                          / Signatures (empty) /
+]
+        ]]></sourcecode>
+        <t>After decryption, the inner Bottle is:</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {},                         / Header (empty) /
+  h'cbor_encoded_signed_bottle...', / Message: the signed Bottle /
+  1,                          / Format: CborBottle /
+  [],                         / Recipients (empty) /
+  []                          / Signatures (empty) /
+]
+        ]]></sourcecode>
+        <t>Which contains another Bottle with the signature:</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {},
+  h'48656c6c6f2c20576f726c6421', / Original content /
+  0,                          / Format: ClearText /
+  [],
+  [[0, h'signer_pubkey...', h'signature...']]
+]
+        ]]></sourcecode>
+      </section>
+
+      <section anchor="example-idcard">
+        <name>IDCard</name>
+        <t>An IDCard with a primary key and one subkey for encryption:</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+{
+  1: h'302a3005...',          / Self: primary Ed25519 public key /
+  2: 0("2025-01-15T10:30:00Z"), / Issued timestamp /
+  3: [                        / SubKeys /
+    {
+      1: h'302a3005...',      / Key: same as primary /
+      2: 0("2025-01-15T10:30:00Z"),
+      4: ["sign"]             / Purposes /
+    },
+    {
+      1: h'302a3005...',      / Key: X25519 encryption key /
+      2: 0("2025-01-15T10:30:00Z"),
+      4: ["decrypt"]          / Purposes /
+    }
+  ],
+  4: [],                      / Revoke (empty) /
+  5: [],                      / Groups (empty) /
+  6: {                        / Meta /
+    "name": "Alice",
+    "email": "alice@example.com"
+  }
+}
+        ]]></sourcecode>
+        <t>This IDCard is then wrapped in a signed Bottle with content-type
+        "idcard" to create a self-signed IDCard.</t>
+      </section>
+
+      <section anchor="example-multi-recipient">
+        <name>Multi-Recipient Encryption</name>
+        <t>A Bottle encrypted for three recipients (Alice, Bob, and Carol):</t>
+        <sourcecode type="cbor-diag"><![CDATA[
+[
+  {"content-type": "application/json"},
+  h'nonce...' || h'ciphertext...' || h'tag...',
+  2,                          / Format: AES /
+  [
+    [0, h'alice_pubkey...', h'wrapped_cek_for_alice...'],
+    [0, h'bob_pubkey...', h'wrapped_cek_for_bob...'],
+    [0, h'carol_pubkey...', h'wrapped_cek_for_carol...']
+  ],
+  []
+]
+        ]]></sourcecode>
+        <t>Each recipient can independently decrypt the message using their
+        private key. The CEK is the same for all recipients; only the wrapped
+        version differs.</t>
+      </section>
+    </section>
 
     <section anchor="Acknowledgements" numbered="false">
       <name>Acknowledgements</name>

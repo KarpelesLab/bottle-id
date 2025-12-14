@@ -532,7 +532,7 @@
           <ol>
             <li>Serialize the IDCard to CBOR</li>
             <li>Create a Bottle with the serialized IDCard as Message</li>
-            <li>Set the content-type header to "idcard"</li>
+            <li>Set the "ct" (content-type) header to "idcard"</li>
             <li>Bottle up the Bottle</li>
             <li>Sign the Bottle using the primary key</li>
             <li>Serialize the signed Bottle to CBOR</li>
@@ -1608,6 +1608,8 @@ Where:
   nonce            = 12 bytes random nonce
   ciphertext       = AES-GCM encrypted CEK (includes auth tag)
           </sourcecode>
+          <t>The version byte provides extensibility for future key encryption
+          schemes. Version 0 indicates standard ECDH as described above.</t>
           <t>For Ed25519 recipient keys, the public key is first converted to
           X25519 format using the standard birational map before performing
           the ECDH operation.</t>
@@ -1616,8 +1618,25 @@ Where:
         <section anchor="alg-mlkem">
           <name>ML-KEM Key Encryption</name>
           <t>For ML-KEM recipients (post-quantum), the Key Encapsulation
-          Mechanism is used directly. The Data field contains the ML-KEM
-          ciphertext that encapsulates the CEK.</t>
+          Mechanism is used. The Data field format depends on the version
+          byte, allowing for different encapsulation modes:</t>
+          <sourcecode type="ascii-art">
+Data = version || kem_data
+
+Version 2 (Pure ML-KEM):
+  version        = 0x02 (1 byte)
+  ct_len         = length of ML-KEM ciphertext (varint encoding)
+  mlkem_ct       = ML-KEM ciphertext
+  nonce          = 12 bytes random nonce
+  ciphertext     = AES-GCM encrypted CEK (includes auth tag)
+
+The shared secret from ML-KEM is used with SHA-256 to derive
+the AES key: key = SHA-256(mlkem_shared_secret)
+          </sourcecode>
+          <t>Implementations MAY define additional version values for hybrid
+          modes combining ML-KEM with classical key agreement (e.g., X25519)
+          for defense-in-depth against potential quantum or classical
+          cryptanalysis breakthroughs.</t>
         </section>
       </section>
     </section>
@@ -2130,8 +2149,8 @@ Where:
   }
 }
         ]]></sourcecode>
-        <t>This IDCard is then wrapped in a signed Bottle with content-type
-        "idcard" to create a self-signed IDCard.</t>
+        <t>This IDCard is then wrapped in a signed Bottle with the "ct"
+        header set to "idcard" to create a self-signed IDCard.</t>
       </section>
 
       <section anchor="example-multi-recipient">

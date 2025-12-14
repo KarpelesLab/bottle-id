@@ -1,0 +1,1400 @@
+
+
+
+
+Internet Engineering Task Force                              M. Karpelès
+Internet-Draft                                          Karpelès Lab Inc
+Intended status: Informational                          14 December 2025
+Expires: 17 June 2026
+
+
+     Bottle and IDCard: Secure Container and Identity Protocols for
+                           Cryptographic Use
+                    draft-karpeles-bottle-idcard-01
+
+Abstract
+
+   This document specifies the Bottle and IDCard protocols for secure
+   message encapsulation and cryptographic identity management.  These
+   protocols aim to bridge the gap between JSON Web Tokens (JWT), which
+   are limited to a single signature and can become large when encoding
+   custom data, and Pretty Good Privacy (PGP), which offers
+   comprehensive features but is often considered cumbersome for modern
+   applications.  The Bottle protocol defines a container format
+   supporting multi-recipient encryption, multiple digital signatures,
+   and nested containers that enable complex security arrangements such
+   as sign-then-encrypt.  The IDCard protocol provides a structure for
+   managing cryptographic identities with purpose-specific subkeys and
+   verifiable group memberships.  Both protocols specify encodings in
+   Concise Binary Object Representation (CBOR) for efficiency and JSON
+   for web compatibility.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on 17 June 2026.
+
+Copyright Notice
+
+   Copyright (c) 2025 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 1]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents (https://trustee.ietf.org/
+   license-info) in effect on the date of publication of this document.
+   Please review these documents carefully, as they describe your rights
+   and restrictions with respect to this document.  Code Components
+   extracted from this document must include Revised BSD License text as
+   described in Section 4.e of the Trust Legal Provisions and are
+   provided without warranty as described in the Revised BSD License.
+
+Table of Contents
+
+   1.  Introduction  . . . . . . . . . . . . . . . . . . . . . . . .   3
+   2.  Terminology . . . . . . . . . . . . . . . . . . . . . . . . .   4
+   3.  Bottle Protocol . . . . . . . . . . . . . . . . . . . . . . .   5
+     3.1.  Message Format  . . . . . . . . . . . . . . . . . . . . .   5
+     3.2.  Bottle Structure  . . . . . . . . . . . . . . . . . . . .   5
+     3.3.  Message Recipients  . . . . . . . . . . . . . . . . . . .   6
+     3.4.  Message Signatures  . . . . . . . . . . . . . . . . . . .   6
+     3.5.  Bottle Operations . . . . . . . . . . . . . . . . . . . .   6
+       3.5.1.  Creating a Bottle . . . . . . . . . . . . . . . . . .   6
+       3.5.2.  Bottling Up (Nesting) . . . . . . . . . . . . . . . .   7
+       3.5.3.  Encrypting a Bottle . . . . . . . . . . . . . . . . .   7
+       3.5.4.  Signing a Bottle  . . . . . . . . . . . . . . . . . .   8
+       3.5.5.  Opening a Bottle  . . . . . . . . . . . . . . . . . .   9
+   4.  IDCard Protocol . . . . . . . . . . . . . . . . . . . . . . .   9
+     4.1.  IDCard Structure  . . . . . . . . . . . . . . . . . . . .   9
+     4.2.  SubKey  . . . . . . . . . . . . . . . . . . . . . . . . .  10
+     4.3.  Key Purposes  . . . . . . . . . . . . . . . . . . . . . .  10
+     4.4.  Membership  . . . . . . . . . . . . . . . . . . . . . . .  10
+     4.5.  IDCard Operations . . . . . . . . . . . . . . . . . . . .  11
+       4.5.1.  Creating an IDCard  . . . . . . . . . . . . . . . . .  11
+       4.5.2.  Adding Keys . . . . . . . . . . . . . . . . . . . . .  11
+       4.5.3.  Signing an IDCard . . . . . . . . . . . . . . . . . .  12
+       4.5.4.  Verifying an IDCard . . . . . . . . . . . . . . . . .  12
+   5.  CBOR Encoding . . . . . . . . . . . . . . . . . . . . . . . .  12
+     5.1.  Bottle CBOR Encoding (Array)  . . . . . . . . . . . . . .  13
+     5.2.  MessageRecipient CBOR Encoding (Array)  . . . . . . . . .  13
+     5.3.  MessageSignature CBOR Encoding (Array)  . . . . . . . . .  14
+     5.4.  IDCard CBOR Encoding (Integer-Keyed Map)  . . . . . . . .  14
+     5.5.  SubKey CBOR Encoding (Integer-Keyed Map)  . . . . . . . .  15
+     5.6.  Membership CBOR Encoding (Integer-Keyed Map)  . . . . . .  16
+   6.  JSON Encoding . . . . . . . . . . . . . . . . . . . . . . . .  17
+     6.1.  Bottle JSON Encoding  . . . . . . . . . . . . . . . . . .  17
+     6.2.  MessageRecipient JSON Encoding  . . . . . . . . . . . . .  17
+     6.3.  MessageSignature JSON Encoding  . . . . . . . . . . . . .  18
+     6.4.  IDCard JSON Encoding  . . . . . . . . . . . . . . . . . .  19
+     6.5.  SubKey JSON Encoding  . . . . . . . . . . . . . . . . . .  19
+     6.6.  Membership JSON Encoding  . . . . . . . . . . . . . . . .  20
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 2]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   7.  Protocol Integration  . . . . . . . . . . . . . . . . . . . .  21
+   8.  IANA Considerations . . . . . . . . . . . . . . . . . . . . .  22
+   9.  Security Considerations . . . . . . . . . . . . . . . . . . .  22
+     9.1.  Threat Model  . . . . . . . . . . . . . . . . . . . . . .  22
+     9.2.  Nonce Requirements  . . . . . . . . . . . . . . . . . . .  22
+     9.3.  Forward Secrecy . . . . . . . . . . . . . . . . . . . . .  23
+     9.4.  Replay Protection . . . . . . . . . . . . . . . . . . . .  23
+     9.5.  Metadata Protection . . . . . . . . . . . . . . . . . . .  23
+     9.6.  Signature Security  . . . . . . . . . . . . . . . . . . .  23
+     9.7.  Key Management  . . . . . . . . . . . . . . . . . . . . .  23
+     9.8.  IDCard Trust Model  . . . . . . . . . . . . . . . . . . .  24
+     9.9.  Algorithm Considerations  . . . . . . . . . . . . . . . .  24
+   10. References  . . . . . . . . . . . . . . . . . . . . . . . . .  24
+     10.1.  Normative References . . . . . . . . . . . . . . . . . .  24
+     10.2.  Informative References . . . . . . . . . . . . . . . . .  25
+   Acknowledgements  . . . . . . . . . . . . . . . . . . . . . . . .  25
+   Author's Address  . . . . . . . . . . . . . . . . . . . . . . . .  25
+
+1.  Introduction
+
+   Secure communication in modern applications requires the ability to
+   encrypt messages for specific recipients, validate message
+   authenticity through signatures, and manage cryptographic identities
+   with different keys for different purposes.
+
+   Existing solutions occupy two extremes.  JSON Web Tokens (JWT)
+   [RFC7519] and the broader JOSE (JSON Object Signing and Encryption)
+   standards are widely adopted in web applications but have
+   limitations: they support only a single signature per token, JSON
+   encoding becomes verbose for binary data, and there is no standard
+   mechanism for nested encryption or signing operations.  At the other
+   extreme, the OpenPGP Message Format [RFC4880] provides comprehensive
+   cryptographic features including multiple signatures, encryption for
+   multiple recipients, and sophisticated key management, but its
+   complexity and legacy design choices have limited adoption outside
+   specific communities.
+
+   The Bottle and IDCard protocols aim to bridge this gap by providing a
+   modern, flexible framework that combines the approachability of JWT-
+   style systems with capabilities closer to PGP, while using efficient
+   binary encoding.
+
+
+
+
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 3]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   The Bottle protocol offers a container format that can encapsulate
+   arbitrary data with multiple layers of encryption and signatures.  It
+   supports nested containers ("bottles within bottles"), allowing for
+   complex security arrangements such as signing encrypted messages to
+   ensure both confidentiality and authenticity.  Multiple signatures
+   from different parties can be attached to a single message, and
+   encryption can target multiple recipients simultaneously.
+
+   The IDCard protocol complements Bottle by providing a structured way
+   to manage cryptographic identities.  An IDCard associates a primary
+   signing key with multiple subkeys for different purposes (e.g.,
+   encryption, signing), enabling separation of duties while maintaining
+   a coherent identity.  IDCards also support verifiable group
+   memberships, allowing for cryptographically-enforced access control.
+
+   Both protocols support Concise Binary Object Representation (CBOR)
+   encoding for efficiency and JSON encoding for web compatibility.
+   Together, they provide a robust foundation for implementing secure
+   messaging, document exchange, and identity management in distributed
+   systems.
+
+   The protocols are designed with algorithm agility in mind and support
+   any cryptographic algorithm whose public keys can be encoded in PKIX
+   format.  This includes post-quantum cryptographic algorithms such as
+   ML-KEM, ML-DSA, and SLH-DSA, ensuring the protocols remain viable as
+   cryptographic standards evolve.
+
+2.  Terminology
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+   document are to be interpreted as described in [RFC2119].
+
+   Additionally, this document uses the following terms:
+
+   Bottle
+      A container for arbitrary data that can be encrypted, signed, and
+      nested within other bottles.
+
+   IDCard
+      A cryptographic identity container that associates a primary
+      signing key with multiple subkeys for specific purposes.
+
+   SubKey
+      A cryptographic key with a specific purpose (e.g., signing,
+      encryption) associated with an IDCard.
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 4]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   Membership
+      An association between an IDCard and a group, signed by the
+      group's authority.
+
+3.  Bottle Protocol
+
+3.1.  Message Format
+
+   The Bottle protocol defines several message formats:
+
+   ClearText (0)
+      Raw, unencrypted data.
+
+   CborBottle (1)
+      A nested Bottle encoded using CBOR.
+
+   AES (2)
+      An AES-GCM encrypted CBOR Bottle.
+
+   JsonBottle (3)
+      A nested Bottle encoded using JSON.
+
+   These formats allow for different encoding and encryption strategies
+   based on the application requirements.  CBOR is the preferred
+   encoding due to its compact binary representation, while JSON
+   provides better compatibility with web systems.
+
+3.2.  Bottle Structure
+
+   A Bottle consists of the following fields:
+
+   Header
+      Map of key/value pairs for metadata, not encrypted unless the
+      message is bottled up (nested).
+
+   Message
+      The payload bytes, which may be cleartext, an encrypted message,
+      or a nested Bottle.
+
+   Format
+      Indicates the format of the Message (see Message Format).
+
+   Recipients
+      List of MessageRecipient structures for encrypted messages.
+
+   Signatures
+      List of MessageSignature structures for signed messages.
+
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 5]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   When serialized, Bottles can be encoded as CBOR or JSON, with CBOR
+   being the preferred format for efficiency.
+
+3.3.  Message Recipients
+
+   A MessageRecipient structure contains:
+
+   Type
+      Recipient type (currently only type 0 is defined).
+
+   Recipient
+      Public key of the recipient in PKIX format [RFC5280].
+
+   Data
+      Key material encrypted for this recipient.
+
+   When a Bottle is encrypted, the content encryption key is encrypted
+   separately for each recipient using that recipient's public key.
+   This allows any recipient to decrypt the message without revealing
+   the decryption capability to other recipients.
+
+3.4.  Message Signatures
+
+   A MessageSignature structure contains:
+
+   Type
+      Signature type (currently only type 0 is defined).
+
+   Signer
+      Public key of the signer in PKIX format.
+
+   Data
+      The signature value.
+
+   Signatures verify the integrity and authenticity of a Bottle's
+   Message field.  Multiple signatures from different signers can be
+   attached to a single Bottle.
+
+3.5.  Bottle Operations
+
+3.5.1.  Creating a Bottle
+
+   A new Bottle is created with cleartext content:
+
+   1.  Set Format to ClearText (0)
+
+   2.  Set Message to the content bytes
+
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 6]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   3.  Initialize Header as an empty map
+
+   4.  Initialize Recipients and Signatures as empty lists
+
+   For content with specific encoding, the protocol defines methods to:
+
+   *  Create a Bottle with CBOR-encoded content
+
+   *  Create a Bottle with JSON-encoded content
+
+3.5.2.  Bottling Up (Nesting)
+
+   The "bottling up" operation encapsulates a Bottle within a new
+   Bottle:
+
+   1.  Serialize the current Bottle to CBOR
+
+   2.  Create a new Bottle with Format set to CborBottle (1)
+
+   3.  Set Message to the serialized bytes
+
+   4.  Reset Header, Recipients, and Signatures in the new Bottle
+
+   This operation is useful for:
+
+   *  Signing encrypted content (encrypt first, bottle up, then sign)
+
+   *  Adding multiple layers of encryption for different recipient
+      groups
+
+   *  Preserving metadata in the inner Bottle while adding new metadata
+      to the outer Bottle
+
+3.5.3.  Encrypting a Bottle
+
+   Encryption of a Bottle occurs as follows:
+
+   1.  If the Bottle has signatures, perform bottling up first
+
+   2.  Generate a random 32-byte AES key
+
+   3.  Generate a random nonce for AES-GCM
+
+   4.  Encrypt the Message using AES-GCM
+
+   5.  For each recipient, encrypt the AES key using the recipient's
+       public key and create a MessageRecipient with the encrypted key
+
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 7]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   6.  Set Format to AES (2)
+
+   7.  Set Recipients to the list of MessageRecipient structures
+
+   8.  Set Message to the concatenation of nonce and ciphertext
+
+   The protocol supports any public key type that can be encoded in PKIX
+   format.  Common key types include:
+
+   *  RSA public keys (using OAEP)
+
+   *  ECDSA public keys (converted to ECDH)
+
+   *  Ed25519 public keys [RFC8032] (converted to X25519 [RFC7748])
+
+   *  ECDH public keys (native X25519 [RFC7748])
+
+   *  Post-quantum KEM public keys (e.g., ML-KEM)
+
+   *  IDCards (using all keys with the "decrypt" purpose)
+
+3.5.4.  Signing a Bottle
+
+   Signing a Bottle:
+
+   1.  If the Bottle has non-empty Header, perform bottling up first
+
+   2.  Compute the signature over the Message bytes using the signer's
+       private key
+
+   3.  Create a MessageSignature with the signer's public key and
+       signature
+
+   4.  Append the MessageSignature to the Signatures list
+
+   The protocol supports any signing algorithm whose public keys can be
+   encoded in PKIX format.  Common algorithms include:
+
+   *  RSA signatures (PKCS#1 v1.5 or PSS)
+
+   *  ECDSA signatures (ASN.1 encoded)
+
+   *  Ed25519 signatures [RFC8032]
+
+   *  Post-quantum signatures (e.g., ML-DSA, SLH-DSA)
+
+   For algorithms that require a hash function, SHA-256 is the default
+   if not otherwise specified.
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 8]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+3.5.5.  Opening a Bottle
+
+   The process of opening a Bottle involves:
+
+   1.  Verify all signatures in the Signatures list against the Message
+
+   2.  Process based on the Format field as described below
+
+   Format-specific processing:
+
+   *  If ClearText: return the Message directly
+
+   *  If CborBottle or JsonBottle: decode the Message into a nested
+      Bottle and continue opening recursively
+
+   *  If AES: perform decryption by finding a recipient entry where the
+      Recipient matches an available private key, decrypting the
+      recipient's Data to obtain the AES key, extracting the nonce and
+      ciphertext from Message, decrypting the ciphertext using AES-GCM,
+      and then decoding the plaintext into a nested Bottle and
+      continuing to open recursively
+
+   The opening process returns:
+
+   *  The final cleartext message
+
+   *  Information about the decryption path, including all verified
+      signatures and the number of decryption operations performed
+
+4.  IDCard Protocol
+
+4.1.  IDCard Structure
+
+   An IDCard consists of:
+
+   Self
+      The primary public key in PKIX format
+
+   Issued
+      Timestamp of IDCard creation
+
+   SubKeys
+      List of SubKey structures for different purposes
+
+   Revoke
+      List of revoked SubKey structures
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                  [Page 9]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   Groups
+      List of Membership structures
+
+   Meta
+      Map of string metadata about the identity
+
+   An IDCard must be self-signed by the primary key to be considered
+   valid.
+
+4.2.  SubKey
+
+   A SubKey consists of:
+
+   Key
+      Public key in PKIX format
+
+   Issued
+      Timestamp when the key was added
+
+   Expires
+      Optional expiration timestamp
+
+   Purposes
+      List of string purposes (e.g., "sign", "decrypt")
+
+   The primary key of an IDCard is automatically added as a SubKey with
+   the "sign" purpose during IDCard creation.
+
+4.3.  Key Purposes
+
+   Key purposes define the allowed uses for a key:
+
+   "sign"
+      The key can be used for generating signatures
+
+   "decrypt"
+      The key can be used for receiving encrypted messages
+
+   When encrypting a message for an IDCard, all keys with the "decrypt"
+   purpose should be used as recipients.  When verifying a signature
+   from an IDCard, the signing key must have the "sign" purpose.
+
+4.4.  Membership
+
+   A Membership represents a relationship between an IDCard and a group:
+
+   Subject
+      Public key of the member IDCard
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 10]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   Key
+      Public key of the group IDCard
+
+   Status
+      Membership status ("valid" or "suspended")
+
+   Issued
+      Timestamp of membership issuance
+
+   Info
+      Metadata about the membership
+
+   SignKey
+      Public key used to sign the membership
+
+   Signature
+      Signature over the membership data
+
+   Memberships must be signed by a key with the "sign" purpose in the
+   group's IDCard.
+
+4.5.  IDCard Operations
+
+4.5.1.  Creating an IDCard
+
+   Creating a new IDCard:
+
+   1.  Marshal the public key in PKIX format
+
+   2.  Set the Self field to the marshalled public key
+
+   3.  Set Issued to the current time
+
+   4.  Add the public key as a SubKey with the "sign" purpose
+
+   5.  Initialize empty Revoke, Groups, and Meta fields
+
+4.5.2.  Adding Keys
+
+   Adding a key to an IDCard:
+
+   1.  Marshal the public key in PKIX format
+
+   2.  Create a SubKey with the marshalled key
+
+   3.  Set Issued to the current time
+
+   4.  Set Purposes based on the key type and intended use
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 11]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   5.  Optionally set an Expires time
+
+   6.  Add the SubKey to the SubKeys list
+
+4.5.3.  Signing an IDCard
+
+   An IDCard must be signed to be considered valid:
+
+   1.  Serialize the IDCard to CBOR
+
+   2.  Create a Bottle with the serialized IDCard as Message
+
+   3.  Set the content-type header to "idcard"
+
+   4.  Bottle up the Bottle
+
+   5.  Sign the Bottle using the primary key
+
+   6.  Serialize the signed Bottle to CBOR
+
+4.5.4.  Verifying an IDCard
+
+   Verifying an IDCard:
+
+   1.  Parse the CBOR-encoded Bottle
+
+   2.  Open the Bottle (no decryption needed)
+
+   3.  Verify that at least one signature matches the IDCard's Self key
+
+   4.  Decode the content as an IDCard
+
+5.  CBOR Encoding
+
+   This section defines the CBOR encoding for all protocol data types.
+   CBOR (Concise Binary Object Representation) is defined in [RFC8949].
+
+   IMPORTANT: This protocol uses two distinct CBOR container types:
+
+   Arrays (CBOR major type 4):
+
+   *  Elements are identified by position (index 0, 1, 2, ...)
+
+   *  All elements MUST be present in the specified order
+
+   *  Used for: Bottle, MessageRecipient, MessageSignature
+
+   *  Chosen for structures where all fields are always present
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 12]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   Maps with Integer Keys (CBOR major type 5):
+
+   *  Elements are identified by explicit integer keys
+
+   *  Keys may be omitted for optional fields
+
+   *  Order of keys is not significant
+
+   *  Used for: IDCard, SubKey, Membership
+
+   *  Chosen for structures with optional fields to optimize encoding
+      length (omitting a key-value pair is more compact than encoding a
+      null value at a fixed array position)
+
+   Using the wrong container type will cause decoding failures.
+   Implementations MUST use arrays where specified and integer-keyed
+   maps where specified.  An integer-keyed map is NOT interchangeable
+   with an array, even when keys are sequential integers starting at 0.
+
+5.1.  Bottle CBOR Encoding (Array)
+
+   A Bottle is encoded as a CBOR array (major type 4) with 5 elements in
+   the following order:
+
+     +=======+============+=============+===========================+
+     | Index | Field      | CBOR Type   | Description               |
+     +=======+============+=============+===========================+
+     | 0     | Header     | map         | String keys to any values |
+     +-------+------------+-------------+---------------------------+
+     | 1     | Message    | byte string | Payload bytes             |
+     +-------+------------+-------------+---------------------------+
+     | 2     | Format     | integer     | MessageFormat enumeration |
+     +-------+------------+-------------+---------------------------+
+     | 3     | Recipients | array       | Array of MessageRecipient |
+     +-------+------------+-------------+---------------------------+
+     | 4     | Signatures | array       | Array of MessageSignature |
+     +-------+------------+-------------+---------------------------+
+
+                                 Table 1
+
+   Example CBOR diagnostic notation for an empty cleartext Bottle:
+
+   [{}, h'', 0, [], []]
+
+5.2.  MessageRecipient CBOR Encoding (Array)
+
+   A MessageRecipient is encoded as a CBOR array (major type 4) with 3
+   elements:
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 13]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+    +=======+===========+=============+==============================+
+    | Index | Field     | CBOR Type   | Description                  |
+    +=======+===========+=============+==============================+
+    | 0     | Type      | integer     | Recipient type (0 = default) |
+    +-------+-----------+-------------+------------------------------+
+    | 1     | Recipient | byte string | Public key in PKIX format    |
+    +-------+-----------+-------------+------------------------------+
+    | 2     | Data      | byte string | Encrypted key material       |
+    +-------+-----------+-------------+------------------------------+
+
+                                 Table 2
+
+   Example CBOR diagnostic notation:
+
+   [0, h'3082...', h'...encrypted_key...']
+
+5.3.  MessageSignature CBOR Encoding (Array)
+
+   A MessageSignature is encoded as a CBOR array (major type 4) with 3
+   elements:
+
+      +=======+========+=============+==============================+
+      | Index | Field  | CBOR Type   | Description                  |
+      +=======+========+=============+==============================+
+      | 0     | Type   | integer     | Signature type (0 = default) |
+      +-------+--------+-------------+------------------------------+
+      | 1     | Signer | byte string | Public key in PKIX format    |
+      +-------+--------+-------------+------------------------------+
+      | 2     | Data   | byte string | Signature value              |
+      +-------+--------+-------------+------------------------------+
+
+                                  Table 3
+
+   Example CBOR diagnostic notation:
+
+   [0, h'3082...', h'...signature...']
+
+5.4.  IDCard CBOR Encoding (Integer-Keyed Map)
+
+   An IDCard is encoded as a CBOR map (major type 5) with integer keys:
+
+
+
+
+
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 14]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   +=====+=========+=============+====================================+
+   | Key | Field   | CBOR Type   | Description                        |
+   +=====+=========+=============+====================================+
+   | 1   | Self    | byte string | Primary public key (PKIX format)   |
+   +-----+---------+-------------+------------------------------------+
+   | 2   | Issued  | tag 0/1     | RFC 3339 timestamp or Unix time    |
+   +-----+---------+-------------+------------------------------------+
+   | 3   | SubKeys | array       | Array of SubKey structures         |
+   +-----+---------+-------------+------------------------------------+
+   | 4   | Revoke  | array       | Array of revoked SubKey structures |
+   +-----+---------+-------------+------------------------------------+
+   | 5   | Groups  | array       | Array of Membership structures     |
+   +-----+---------+-------------+------------------------------------+
+   | 6   | Meta    | map         | String keys to string values       |
+   +-----+---------+-------------+------------------------------------+
+
+                                 Table 4
+
+   Example CBOR diagnostic notation:
+
+   {
+     1: h'3082...',
+     2: 0("2025-03-15T10:30:00Z"),
+     3: [...],
+     4: [],
+     5: [],
+     6: {"name": "Alice"}
+   }
+
+5.5.  SubKey CBOR Encoding (Integer-Keyed Map)
+
+   A SubKey is encoded as a CBOR map (major type 5) with integer keys:
+
+    +=====+==========+=============+=================================+
+    | Key | Field    | CBOR Type   | Description                     |
+    +=====+==========+=============+=================================+
+    | 1   | Key      | byte string | Public key in PKIX format       |
+    +-----+----------+-------------+---------------------------------+
+    | 2   | Issued   | tag 0/1     | RFC 3339 timestamp or Unix time |
+    +-----+----------+-------------+---------------------------------+
+    | 3   | Expires  | tag 0/1     | Optional expiration timestamp   |
+    +-----+----------+-------------+---------------------------------+
+    | 4   | Purposes | array       | Array of text strings           |
+    +-----+----------+-------------+---------------------------------+
+
+                                 Table 5
+
+   The Expires field (key 3) is omitted if no expiration is set.
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 15]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   Example CBOR diagnostic notation:
+
+   {
+     1: h'3082...',
+     2: 0("2025-03-15T10:30:00Z"),
+     4: ["sign", "decrypt"]
+   }
+
+5.6.  Membership CBOR Encoding (Integer-Keyed Map)
+
+   A Membership is encoded as a CBOR map (major type 5) with integer
+   keys:
+
+    +=====+===========+=============+=================================+
+    | Key | Field     | CBOR Type   | Description                     |
+    +=====+===========+=============+=================================+
+    | 1   | Subject   | byte string | Member's IDCard Self key        |
+    +-----+-----------+-------------+---------------------------------+
+    | 2   | Key       | byte string | Group's IDCard Self key         |
+    +-----+-----------+-------------+---------------------------------+
+    | 3   | Status    | text string | "valid" or "suspended"          |
+    +-----+-----------+-------------+---------------------------------+
+    | 4   | Issued    | tag 0/1     | RFC 3339 timestamp or Unix time |
+    +-----+-----------+-------------+---------------------------------+
+    | 5   | Info      | map         | String keys to string values    |
+    +-----+-----------+-------------+---------------------------------+
+    | 6   | SignKey   | byte string | Signing key in PKIX format      |
+    +-----+-----------+-------------+---------------------------------+
+    | 7   | Signature | byte string | Signature over membership data  |
+    +-----+-----------+-------------+---------------------------------+
+
+                                  Table 6
+
+   When a Membership is stored within an IDCard's Groups array, the
+   Subject field (key 1) is omitted as it is redundant with the
+   containing IDCard's Self field.
+
+   Example CBOR diagnostic notation:
+
+   {
+     1: h'3082...',
+     2: h'3082...',
+     3: "valid",
+     4: 0("2025-03-15T10:30:00Z"),
+     5: {"role": "member"},
+     6: h'3082...',
+     7: h'...signature...'
+   }
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 16]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+6.  JSON Encoding
+
+   This section defines the JSON encoding for all protocol data types.
+   JSON encoding is provided for compatibility with web systems and
+   environments where CBOR support is limited.  CBOR remains the
+   preferred encoding due to its compact binary representation.
+
+   All structures are encoded as JSON objects with string keys.  Byte
+   strings (such as keys and signatures) are encoded as base64url
+   strings without padding ([RFC4648] Section 5).  Timestamps are
+   encoded as RFC 3339 strings.
+
+   Fields marked as "omitempty" are omitted from the JSON output when
+   they contain their zero value (empty array, empty map, zero, etc.).
+
+6.1.  Bottle JSON Encoding
+
+   A Bottle is encoded as a JSON object with the following fields:
+
+      +=======+============+===========+===========================+
+      | Key   | Field      | JSON Type | Description               |
+      +=======+============+===========+===========================+
+      | "hdr" | Header     | object    | String keys to any values |
+      +-------+------------+-----------+---------------------------+
+      | "msg" | Message    | string    | Base64url-encoded payload |
+      +-------+------------+-----------+---------------------------+
+      | "fmt" | Format     | number    | MessageFormat enumeration |
+      +-------+------------+-----------+---------------------------+
+      | "dst" | Recipients | array     | Array of MessageRecipient |
+      +-------+------------+-----------+---------------------------+
+      | "sig" | Signatures | array     | Array of MessageSignature |
+      +-------+------------+-----------+---------------------------+
+
+                                 Table 7
+
+   The "hdr", "dst", and "sig" fields are omitted when empty.
+
+   Example JSON:
+
+   {
+     "msg": "SGVsbG8gV29ybGQ",
+     "fmt": 0
+   }
+
+6.2.  MessageRecipient JSON Encoding
+
+   A MessageRecipient is encoded as a JSON object:
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 17]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+     +=======+===========+===========+==============================+
+     | Key   | Field     | JSON Type | Description                  |
+     +=======+===========+===========+==============================+
+     | "typ" | Type      | number    | Recipient type (0 = default) |
+     +-------+-----------+-----------+------------------------------+
+     | "key" | Recipient | string    | Base64url public key (PKIX)  |
+     +-------+-----------+-----------+------------------------------+
+     | "dat" | Data      | string    | Base64url encrypted key      |
+     +-------+-----------+-----------+------------------------------+
+
+                                 Table 8
+
+   The "typ" field is omitted when zero.
+
+   Example JSON:
+
+   {
+     "key": "MIIBIjANBgkq...",
+     "dat": "encrypted_key_base64url"
+   }
+
+6.3.  MessageSignature JSON Encoding
+
+   A MessageSignature is encoded as a JSON object:
+
+       +=======+========+===========+==============================+
+       | Key   | Field  | JSON Type | Description                  |
+       +=======+========+===========+==============================+
+       | "typ" | Type   | number    | Signature type (0 = default) |
+       +-------+--------+-----------+------------------------------+
+       | "key" | Signer | string    | Base64url public key (PKIX)  |
+       +-------+--------+-----------+------------------------------+
+       | "dat" | Data   | string    | Base64url signature value    |
+       +-------+--------+-----------+------------------------------+
+
+                                  Table 9
+
+   The "typ" field is omitted when zero.
+
+   Example JSON:
+
+   {
+     "key": "MIIBIjANBgkq...",
+     "dat": "signature_base64url"
+   }
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 18]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+6.4.  IDCard JSON Encoding
+
+   An IDCard is encoded as a JSON object:
+
+    +========+=========+===========+=================================+
+    | Key    | Field   | JSON Type | Description                     |
+    +========+=========+===========+=================================+
+    | "self" | Self    | string    | Base64url primary public key    |
+    +--------+---------+-----------+---------------------------------+
+    | "iss"  | Issued  | string    | RFC 3339 timestamp              |
+    +--------+---------+-----------+---------------------------------+
+    | "sub"  | SubKeys | array     | Array of SubKey objects         |
+    +--------+---------+-----------+---------------------------------+
+    | "rev"  | Revoke  | array     | Array of revoked SubKey objects |
+    +--------+---------+-----------+---------------------------------+
+    | "grp"  | Groups  | array     | Array of Membership objects     |
+    +--------+---------+-----------+---------------------------------+
+    | "meta" | Meta    | object    | String keys to string values    |
+    +--------+---------+-----------+---------------------------------+
+
+                                 Table 10
+
+   Example JSON:
+
+   {
+     "self": "MIIBIjANBgkq...",
+     "iss": "2025-03-15T10:30:00Z",
+     "sub": [...],
+     "rev": [],
+     "grp": [],
+     "meta": {"name": "Alice"}
+   }
+
+6.5.  SubKey JSON Encoding
+
+   A SubKey is encoded as a JSON object:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 19]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+     +=======+==========+===========+===============================+
+     | Key   | Field    | JSON Type | Description                   |
+     +=======+==========+===========+===============================+
+     | "key" | Key      | string    | Base64url public key (PKIX)   |
+     +-------+----------+-----------+-------------------------------+
+     | "iss" | Issued   | string    | RFC 3339 timestamp            |
+     +-------+----------+-----------+-------------------------------+
+     | "exp" | Expires  | string    | RFC 3339 timestamp (optional) |
+     +-------+----------+-----------+-------------------------------+
+     | "pur" | Purposes | array     | Array of purpose strings      |
+     +-------+----------+-----------+-------------------------------+
+
+                                 Table 11
+
+   The "exp" field is omitted if no expiration is set.
+
+   Example JSON:
+
+   {
+     "key": "MIIBIjANBgkq...",
+     "iss": "2025-03-15T10:30:00Z",
+     "pur": ["sign", "decrypt"]
+   }
+
+6.6.  Membership JSON Encoding
+
+   A Membership is encoded as a JSON object:
+
+     +=======+===========+===========+==============================+
+     | Key   | Field     | JSON Type | Description                  |
+     +=======+===========+===========+==============================+
+     | "sub" | Subject   | string    | Base64url member's Self key  |
+     +-------+-----------+-----------+------------------------------+
+     | "key" | Key       | string    | Base64url group's Self key   |
+     +-------+-----------+-----------+------------------------------+
+     | "sta" | Status    | string    | "valid" or "suspended"       |
+     +-------+-----------+-----------+------------------------------+
+     | "iss" | Issued    | string    | RFC 3339 timestamp           |
+     +-------+-----------+-----------+------------------------------+
+     | "nfo" | Info      | object    | String keys to string values |
+     +-------+-----------+-----------+------------------------------+
+     | "sky" | SignKey   | string    | Base64url signing key (PKIX) |
+     +-------+-----------+-----------+------------------------------+
+     | "sig" | Signature | string    | Base64url signature value    |
+     +-------+-----------+-----------+------------------------------+
+
+                                 Table 12
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 20]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   When a Membership is stored within an IDCard's Groups array, the
+   "sub" field is omitted as it is redundant with the containing
+   IDCard's "self" field.
+
+   Example JSON:
+
+   {
+     "sub": "MIIBIjANBgkq...",
+     "key": "MIIBCgKCAQEA...",
+     "sta": "valid",
+     "iss": "2025-03-15T10:30:00Z",
+     "nfo": {"role": "member"},
+     "sky": "MIIBIjANBgkq...",
+     "sig": "signature_base64url"
+   }
+
+7.  Protocol Integration
+
+   The Bottle and IDCard protocols can be integrated with existing
+   applications and protocols:
+
+   HTTP Integration:
+
+   *  Bottles can be transmitted as HTTP request/response bodies
+
+   *  Content-Type headers can indicate the encoding (application/cbor
+      or application/json)
+
+   *  HTTP authentication can be implemented using IDCard signatures
+
+   Storage Systems:
+
+   *  Bottles provide a secure container for storing sensitive data
+
+   *  Data can be encrypted for multiple recipients
+
+   *  Access control can be implemented using IDCards and Memberships
+
+   Key Distribution:
+
+   *  IDCards provide a mechanism for distributing public keys
+
+   *  SubKeys with different purposes allow for key separation
+
+   *  Signed IDCards ensure the authenticity of public keys
+
+   Group Management:
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 21]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   *  Memberships allow for creating and managing groups
+
+   *  Group membership can be verified cryptographically
+
+   *  Revocation of group membership is supported
+
+8.  IANA Considerations
+
+   This memo includes no request to IANA.
+
+9.  Security Considerations
+
+   This section discusses security considerations for implementations of
+   the Bottle and IDCard protocols.
+
+9.1.  Threat Model
+
+   The Bottle protocol is designed to provide confidentiality and
+   authenticity for messages in transit and at rest.  It protects
+   against passive eavesdroppers who cannot decrypt messages without
+   access to a recipient's private key, and against message tampering
+   through authenticated encryption (AES-GCM) and digital signatures.
+
+   The protocol does NOT provide protection against:
+
+   *  Compromise of private keys
+
+   *  Traffic analysis (message sizes and timing are observable)
+
+   *  Denial of service attacks
+
+   *  Attacks on the underlying cryptographic primitives
+
+9.2.  Nonce Requirements
+
+   AES-GCM requires a unique nonce for each encryption operation with
+   the same key.  Nonce reuse with the same key is catastrophic: it
+   allows an attacker to recover the XOR of plaintexts and forge
+   authentication tags.  Implementations MUST generate a fresh random
+   nonce for each encryption operation.  The nonce is 12 bytes and
+   SHOULD be generated using a cryptographically secure random number
+   generator.
+
+
+
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 22]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+9.3.  Forward Secrecy
+
+   This protocol does not provide forward secrecy.  If a recipient's
+   private key is compromised, an attacker can decrypt all past messages
+   encrypted to that key.  Applications requiring forward secrecy should
+   implement key rotation mechanisms or use ephemeral key exchange
+   protocols in conjunction with Bottle.
+
+9.4.  Replay Protection
+
+   The Bottle protocol does not include built-in replay protection.
+   Applications that require replay protection SHOULD include
+   timestamps, sequence numbers, or unique message identifiers in the
+   message header or payload and implement appropriate validation logic.
+
+9.5.  Metadata Protection
+
+   The Header field of a Bottle is not encrypted unless the Bottle is
+   nested within another encrypted Bottle ("bottled up").  Applications
+   that require header confidentiality MUST use the bottling up
+   operation before encryption.  Additionally, the Recipients field
+   exposes the public keys of all intended recipients, which may reveal
+   information about the communication parties.
+
+9.6.  Signature Security
+
+   Implementations MUST verify all signatures before trusting message
+   content.  Signature verification SHOULD be performed using constant-
+   time comparison functions to prevent timing attacks.  When multiple
+   signatures are present, applications should define policies for which
+   signatures are required versus optional.
+
+   IDCards MUST be verified to be self-signed by their primary key
+   before trusting any associated SubKeys or Memberships.
+
+9.7.  Key Management
+
+   Private keys MUST be stored securely and protected from unauthorized
+   access.  Memory containing sensitive key material SHOULD be cleared
+   immediately after use.  Applications SHOULD implement secure key
+   generation using cryptographically secure random number generators.
+
+   When converting between key types (e.g., Ed25519 to X25519 for
+   encryption), implementations MUST use well-established conversion
+   methods.  Incorrect conversion can compromise security.
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 23]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+9.8.  IDCard Trust Model
+
+   This specification does not define how trust in IDCards is
+   established.  Applications MUST define their own trust model, which
+   may include:
+
+   *  Trust on first use (TOFU)
+
+   *  Web of trust through Membership signatures
+
+   *  Out-of-band verification of IDCard fingerprints
+
+   *  Integration with existing PKI systems
+
+   Applications MUST check SubKey expiration times before use and MUST
+   NOT use keys that appear in the Revoke list.  Purpose restrictions on
+   SubKeys MUST be enforced: a key with only the "sign" purpose MUST NOT
+   be used for decryption, and vice versa.
+
+9.9.  Algorithm Considerations
+
+   This protocol supports any cryptographic algorithm whose public keys
+   can be encoded in PKIX format, including traditional algorithms (RSA,
+   ECDSA, Ed25519, X25519) and post-quantum algorithms (ML-KEM, ML-DSA,
+   SLH-DSA).  While algorithm agility provides flexibility and enables
+   migration to post-quantum cryptography, it also increases
+   implementation complexity and attack surface.  Implementations SHOULD
+   support a minimal set of algorithms appropriate for their use case.
+
+   For new deployments, implementations SHOULD prefer modern algorithms
+   (Ed25519, X25519) over legacy options.  Applications with long-term
+   security requirements SHOULD consider post-quantum algorithms or
+   hybrid approaches combining traditional and post-quantum
+   cryptography.
+
+10.  References
+
+10.1.  Normative References
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997,
+              <https://www.rfc-editor.org/info/rfc2119>.
+
+   [RFC4648]  Josefsson, S., "The Base16, Base32, and Base64 Data
+              Encodings", RFC 4648, DOI 10.17487/RFC4648, October 2006,
+              <https://www.rfc-editor.org/info/rfc4648>.
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 24]
+
+Internet-Draft              Bottle and IDCard              December 2025
+
+
+   [RFC5280]  Cooper, D., Santesson, S., Farrell, S., Boeyen, S.,
+              Housley, R., and W. Polk, "Internet X.509 Public Key
+              Infrastructure Certificate and Certificate Revocation List
+              (CRL) Profile", RFC 5280, DOI 10.17487/RFC5280, May 2008,
+              <https://www.rfc-editor.org/info/rfc5280>.
+
+   [RFC8949]  Bormann, C. and P. Hoffman, "Concise Binary Object
+              Representation (CBOR)", STD 94, RFC 8949,
+              DOI 10.17487/RFC8949, December 2020,
+              <https://www.rfc-editor.org/info/rfc8949>.
+
+10.2.  Informative References
+
+   [RFC4880]  Callas, J., Donnerhacke, L., Finney, H., Shaw, D., and R.
+              Thayer, "OpenPGP Message Format", RFC 4880,
+              DOI 10.17487/RFC4880, November 2007,
+              <https://www.rfc-editor.org/info/rfc4880>.
+
+   [RFC7519]  Jones, M., Bradley, J., and N. Sakimura, "JSON Web Token
+              (JWT)", RFC 7519, DOI 10.17487/RFC7519, May 2015,
+              <https://www.rfc-editor.org/info/rfc7519>.
+
+   [RFC8032]  Josefsson, S. and I. Liusvaara, "Edwards-Curve Digital
+              Signature Algorithm (EdDSA)", RFC 8032,
+              DOI 10.17487/RFC8032, January 2017,
+              <https://www.rfc-editor.org/info/rfc8032>.
+
+   [RFC7748]  Langley, A., Hamburg, M., and S. Turner, "Elliptic Curves
+              for Security", RFC 7748, DOI 10.17487/RFC7748, January
+              2016, <https://www.rfc-editor.org/info/rfc7748>.
+
+Acknowledgements
+
+   The author would like to thank the contributors to the cryptographic
+   community for their insights and feedback on secure container formats
+   and identity management.
+
+Author's Address
+
+   Mark Karpelès
+   Karpelès Lab Inc
+   Japan
+   Email: mark@klb.jp
+   URI:   https://klb.jp
+
+
+
+
+
+
+
+Karpelès                  Expires 17 June 2026                 [Page 25]

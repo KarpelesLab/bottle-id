@@ -1,0 +1,1443 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-model href="RFCXML/rfc7991bis.rnc"?>
+
+<!DOCTYPE rfc [
+  <!ENTITY nbsp    "&#160;">
+  <!ENTITY zwsp   "&#8203;">
+  <!ENTITY nbhy   "&#8209;">
+  <!ENTITY wj     "&#8288;">
+]>
+
+<rfc
+  xmlns:xi="http://www.w3.org/2001/XInclude"
+  category="info"
+  docName="draft-karpeles-bottle-idcard-01"
+  ipr="trust200902"
+  obsoletes=""
+  updates=""
+  submissionType="IETF"
+  xml:lang="en"
+  version="3">
+
+  <front>
+    <title abbrev="Bottle and IDCard">Bottle and IDCard: Secure Container and Identity Protocols for Cryptographic Use</title>
+
+    <seriesInfo name="Internet-Draft" value="draft-karpeles-bottle-idcard-01"/>
+
+    <author fullname="Mark Karpelès" initials="M." surname="Karpelès">
+      <organization>Karpelès Lab Inc</organization>
+      <address>
+        <postal>
+          <city>Tokyo</city>
+          <country>JP</country>
+        </postal>
+        <email>mark@klb.jp</email>
+        <uri>https://klb.jp</uri>
+      </address>
+    </author>
+
+    <date year="2025"/>
+
+    <area>Security</area>
+    <workgroup>Internet Engineering Task Force</workgroup>
+
+    <keyword>cryptography</keyword>
+    <keyword>encryption</keyword>
+    <keyword>identity</keyword>
+    <keyword>CBOR</keyword>
+
+    <abstract>
+      <t>This document specifies the Bottle and IDCard protocols for secure
+      message encapsulation and cryptographic identity management. These
+      protocols aim to bridge the gap between JSON Web Tokens (JWT), which
+      are limited to a single signature and can become large when encoding
+      custom data, and Pretty Good Privacy (PGP), which offers comprehensive
+      features but is often considered cumbersome for modern applications.
+      The Bottle protocol defines a container format supporting multi-recipient
+      encryption, multiple digital signatures, and nested containers that enable
+      complex security arrangements such as sign-then-encrypt. The IDCard
+      protocol provides a structure for managing cryptographic identities with
+      purpose-specific subkeys and verifiable group memberships. Both protocols
+      specify encodings in Concise Binary Object Representation (CBOR) for
+      efficiency and JSON for web compatibility.</t>
+    </abstract>
+
+  </front>
+
+  <middle>
+
+    <section anchor="introduction">
+      <name>Introduction</name>
+      <t>Secure communication in modern applications requires the ability to
+      encrypt messages for specific recipients, validate message authenticity
+      through signatures, and manage cryptographic identities with different
+      keys for different purposes.</t>
+
+      <t>Existing solutions occupy two extremes. JSON Web Tokens (JWT)
+      <xref target="RFC7519"/> and the broader JOSE (JSON Object Signing and
+      Encryption) standards are widely adopted in web applications but have
+      limitations: they support only a single signature per token, JSON
+      encoding becomes verbose for binary data, and there is no standard
+      mechanism for nested encryption or signing operations. At the other
+      extreme, the OpenPGP Message Format <xref target="RFC4880"/> provides
+      comprehensive cryptographic features including multiple signatures,
+      encryption for multiple recipients, and sophisticated key management,
+      but its complexity and legacy design choices have limited adoption
+      outside specific communities.</t>
+
+      <t>The Bottle and IDCard protocols aim to bridge this gap by providing
+      a modern, flexible framework that combines the approachability of
+      JWT-style systems with capabilities closer to PGP, while using
+      efficient binary encoding.</t>
+
+      <t>The Bottle protocol offers a container format that can encapsulate
+      arbitrary data with multiple layers of encryption and signatures. It
+      supports nested containers ("bottles within bottles"), allowing for
+      complex security arrangements such as signing encrypted messages to
+      ensure both confidentiality and authenticity. Multiple signatures from
+      different parties can be attached to a single message, and encryption
+      can target multiple recipients simultaneously.</t>
+
+      <t>The IDCard protocol complements Bottle by providing a structured way to
+      manage cryptographic identities. An IDCard associates a primary signing
+      key with multiple subkeys for different purposes (e.g., encryption,
+      signing), enabling separation of duties while maintaining a coherent
+      identity. IDCards also support verifiable group memberships, allowing
+      for cryptographically-enforced access control.</t>
+
+      <t>Both protocols support Concise Binary Object Representation (CBOR)
+      encoding for efficiency and JSON encoding for web compatibility.
+      Together, they provide a robust foundation for implementing secure
+      messaging, document exchange, and identity management in distributed
+      systems.</t>
+
+      <t>The protocols are designed with algorithm agility in mind and support
+      any cryptographic algorithm whose public keys can be encoded in PKIX
+      format. This includes post-quantum cryptographic algorithms such as
+      ML-KEM, ML-DSA, and SLH-DSA, ensuring the protocols remain viable as
+      cryptographic standards evolve.</t>
+    </section>
+
+    <section anchor="terminology">
+      <name>Terminology</name>
+      <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+      "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+      document are to be interpreted as described in <xref target="RFC2119"/>.</t>
+
+      <t>Additionally, this document uses the following terms:</t>
+
+      <dl newline="true">
+        <dt>Bottle</dt>
+        <dd>A container for arbitrary data that can be encrypted,
+        signed, and nested within other bottles.</dd>
+
+        <dt>IDCard</dt>
+        <dd>A cryptographic identity container that associates a
+        primary signing key with multiple subkeys for specific
+        purposes.</dd>
+
+        <dt>SubKey</dt>
+        <dd>A cryptographic key with a specific purpose (e.g., signing,
+        encryption) associated with an IDCard.</dd>
+
+        <dt>Membership</dt>
+        <dd>An association between an IDCard and a group, signed by
+        the group's authority.</dd>
+      </dl>
+    </section>
+
+    <section anchor="bottle-protocol">
+      <name>Bottle Protocol</name>
+
+      <section anchor="message-format">
+        <name>Message Format</name>
+        <t>The Bottle protocol defines several message formats:</t>
+
+        <dl newline="true">
+          <dt>ClearText (0)</dt>
+          <dd>Raw, unencrypted data.</dd>
+
+          <dt>CborBottle (1)</dt>
+          <dd>A nested Bottle encoded using CBOR.</dd>
+
+          <dt>AES (2)</dt>
+          <dd>An AES-GCM encrypted CBOR Bottle.</dd>
+
+          <dt>JsonBottle (3)</dt>
+          <dd>A nested Bottle encoded using JSON.</dd>
+        </dl>
+
+        <t>These formats allow for different encoding and encryption strategies
+        based on the application requirements. CBOR is the preferred encoding
+        due to its compact binary representation, while JSON provides better
+        compatibility with web systems.</t>
+      </section>
+
+      <section anchor="bottle-structure">
+        <name>Bottle Structure</name>
+        <t>A Bottle consists of the following fields:</t>
+
+        <dl newline="true">
+          <dt>Header</dt>
+          <dd>Map of key/value pairs for metadata, not encrypted unless
+          the message is bottled up (nested).</dd>
+
+          <dt>Message</dt>
+          <dd>The payload bytes, which may be cleartext, an encrypted
+          message, or a nested Bottle.</dd>
+
+          <dt>Format</dt>
+          <dd>Indicates the format of the Message (see Message Format).</dd>
+
+          <dt>Recipients</dt>
+          <dd>List of MessageRecipient structures for encrypted messages.</dd>
+
+          <dt>Signatures</dt>
+          <dd>List of MessageSignature structures for signed messages.</dd>
+        </dl>
+
+        <t>When serialized, Bottles can be encoded as CBOR or JSON, with CBOR
+        being the preferred format for efficiency.</t>
+      </section>
+
+      <section anchor="message-recipients">
+        <name>Message Recipients</name>
+        <t>A MessageRecipient structure contains:</t>
+
+        <dl newline="true">
+          <dt>Type</dt>
+          <dd>Recipient type (currently only type 0 is defined).</dd>
+
+          <dt>Recipient</dt>
+          <dd>Public key of the recipient in PKIX format <xref target="RFC5280"/>.</dd>
+
+          <dt>Data</dt>
+          <dd>Key material encrypted for this recipient.</dd>
+        </dl>
+
+        <t>When a Bottle is encrypted, the content encryption key is encrypted
+        separately for each recipient using that recipient's public key.
+        This allows any recipient to decrypt the message without revealing
+        the decryption capability to other recipients.</t>
+      </section>
+
+      <section anchor="message-signatures">
+        <name>Message Signatures</name>
+        <t>A MessageSignature structure contains:</t>
+
+        <dl newline="true">
+          <dt>Type</dt>
+          <dd>Signature type (currently only type 0 is defined).</dd>
+
+          <dt>Signer</dt>
+          <dd>Public key of the signer in PKIX format.</dd>
+
+          <dt>Data</dt>
+          <dd>The signature value.</dd>
+        </dl>
+
+        <t>Signatures verify the integrity and authenticity of a Bottle's Message
+        field. Multiple signatures from different signers can be attached to
+        a single Bottle.</t>
+      </section>
+
+      <section anchor="bottle-operations">
+        <name>Bottle Operations</name>
+
+        <section anchor="creating-a-bottle">
+          <name>Creating a Bottle</name>
+          <t>A new Bottle is created with cleartext content:</t>
+
+          <ol>
+            <li>Set Format to ClearText (0)</li>
+            <li>Set Message to the content bytes</li>
+            <li>Initialize Header as an empty map</li>
+            <li>Initialize Recipients and Signatures as empty lists</li>
+          </ol>
+
+          <t>For content with specific encoding, the protocol defines methods to:</t>
+
+          <ul>
+            <li>Create a Bottle with CBOR-encoded content</li>
+            <li>Create a Bottle with JSON-encoded content</li>
+          </ul>
+        </section>
+
+        <section anchor="bottling-up">
+          <name>Bottling Up (Nesting)</name>
+          <t>The "bottling up" operation encapsulates a Bottle within a new Bottle:</t>
+
+          <ol>
+            <li>Serialize the current Bottle to CBOR</li>
+            <li>Create a new Bottle with Format set to CborBottle (1)</li>
+            <li>Set Message to the serialized bytes</li>
+            <li>Reset Header, Recipients, and Signatures in the new Bottle</li>
+          </ol>
+
+          <t>This operation is useful for:</t>
+
+          <ul>
+            <li>Signing encrypted content (encrypt first, bottle up, then sign)</li>
+            <li>Adding multiple layers of encryption for different recipient groups</li>
+            <li>Preserving metadata in the inner Bottle while adding new metadata to
+            the outer Bottle</li>
+          </ul>
+        </section>
+
+        <section anchor="encrypting-a-bottle">
+          <name>Encrypting a Bottle</name>
+          <t>Encryption of a Bottle occurs as follows:</t>
+
+          <ol>
+            <li>If the Bottle has signatures, perform bottling up first</li>
+            <li>Generate a random 32-byte AES key</li>
+            <li>Generate a random nonce for AES-GCM</li>
+            <li>Encrypt the Message using AES-GCM</li>
+            <li>For each recipient, encrypt the AES key using the recipient's
+            public key and create a MessageRecipient with the encrypted key</li>
+            <li>Set Format to AES (2)</li>
+            <li>Set Recipients to the list of MessageRecipient structures</li>
+            <li>Set Message to the concatenation of nonce and ciphertext</li>
+          </ol>
+
+          <t>The protocol supports any public key type that can be encoded in
+          PKIX format. Common key types include:</t>
+
+          <ul>
+            <li>RSA public keys (using OAEP)</li>
+            <li>ECDSA public keys (converted to ECDH)</li>
+            <li>Ed25519 public keys <xref target="RFC8032"/> (converted to X25519 <xref target="RFC7748"/>)</li>
+            <li>ECDH public keys (native X25519 <xref target="RFC7748"/>)</li>
+            <li>Post-quantum KEM public keys (e.g., ML-KEM)</li>
+            <li>IDCards (using all keys with the "decrypt" purpose)</li>
+          </ul>
+        </section>
+
+        <section anchor="signing-a-bottle">
+          <name>Signing a Bottle</name>
+          <t>Signing a Bottle:</t>
+
+          <ol>
+            <li>If the Bottle has non-empty Header, perform bottling up first</li>
+            <li>Compute the signature over the Message bytes using the signer's
+            private key</li>
+            <li>Create a MessageSignature with the signer's public key and signature</li>
+            <li>Append the MessageSignature to the Signatures list</li>
+          </ol>
+
+          <t>The protocol supports any signing algorithm whose public keys can
+          be encoded in PKIX format. Common algorithms include:</t>
+
+          <ul>
+            <li>RSA signatures (PKCS#1 v1.5 or PSS)</li>
+            <li>ECDSA signatures (ASN.1 encoded)</li>
+            <li>Ed25519 signatures <xref target="RFC8032"/></li>
+            <li>Post-quantum signatures (e.g., ML-DSA, SLH-DSA)</li>
+          </ul>
+
+          <t>For algorithms that require a hash function, SHA-256 is the default
+          if not otherwise specified.</t>
+        </section>
+
+        <section anchor="opening-a-bottle">
+          <name>Opening a Bottle</name>
+          <t>The process of opening a Bottle involves:</t>
+
+          <ol>
+            <li>Verify all signatures in the Signatures list against the Message</li>
+            <li>Process based on the Format field as described below</li>
+          </ol>
+
+          <t>Format-specific processing:</t>
+
+          <ul>
+            <li>If ClearText: return the Message directly</li>
+            <li>If CborBottle or JsonBottle: decode the Message into a nested
+            Bottle and continue opening recursively</li>
+            <li>If AES: perform decryption by finding a recipient entry where
+            the Recipient matches an available private key, decrypting the
+            recipient's Data to obtain the AES key, extracting the nonce and
+            ciphertext from Message, decrypting the ciphertext using AES-GCM,
+            and then decoding the plaintext into a nested Bottle and continuing
+            to open recursively</li>
+          </ul>
+
+          <t>The opening process returns:</t>
+
+          <ul>
+            <li>The final cleartext message</li>
+            <li>Information about the decryption path, including all verified
+            signatures and the number of decryption operations performed</li>
+          </ul>
+        </section>
+      </section>
+    </section>
+
+    <section anchor="idcard-protocol">
+      <name>IDCard Protocol</name>
+
+      <section anchor="idcard-structure">
+        <name>IDCard Structure</name>
+        <t>An IDCard consists of:</t>
+
+        <dl newline="true">
+          <dt>Self</dt>
+          <dd>The primary public key in PKIX format</dd>
+
+          <dt>Issued</dt>
+          <dd>Timestamp of IDCard creation</dd>
+
+          <dt>SubKeys</dt>
+          <dd>List of SubKey structures for different purposes</dd>
+
+          <dt>Revoke</dt>
+          <dd>List of revoked SubKey structures</dd>
+
+          <dt>Groups</dt>
+          <dd>List of Membership structures</dd>
+
+          <dt>Meta</dt>
+          <dd>Map of string metadata about the identity</dd>
+        </dl>
+
+        <t>An IDCard must be self-signed by the primary key to be considered valid.</t>
+      </section>
+
+      <section anchor="subkey">
+        <name>SubKey</name>
+        <t>A SubKey consists of:</t>
+
+        <dl newline="true">
+          <dt>Key</dt>
+          <dd>Public key in PKIX format</dd>
+
+          <dt>Issued</dt>
+          <dd>Timestamp when the key was added</dd>
+
+          <dt>Expires</dt>
+          <dd>Optional expiration timestamp</dd>
+
+          <dt>Purposes</dt>
+          <dd>List of string purposes (e.g., "sign", "decrypt")</dd>
+        </dl>
+
+        <t>The primary key of an IDCard is automatically added as a SubKey with
+        the "sign" purpose during IDCard creation.</t>
+      </section>
+
+      <section anchor="key-purposes">
+        <name>Key Purposes</name>
+        <t>Key purposes define the allowed uses for a key:</t>
+
+        <dl newline="true">
+          <dt>"sign"</dt>
+          <dd>The key can be used for generating signatures</dd>
+
+          <dt>"decrypt"</dt>
+          <dd>The key can be used for receiving encrypted messages</dd>
+        </dl>
+
+        <t>When encrypting a message for an IDCard, all keys with the "decrypt"
+        purpose should be used as recipients. When verifying a signature from
+        an IDCard, the signing key must have the "sign" purpose.</t>
+      </section>
+
+      <section anchor="membership">
+        <name>Membership</name>
+        <t>A Membership represents a relationship between an IDCard and a group:</t>
+
+        <dl newline="true">
+          <dt>Subject</dt>
+          <dd>Public key of the member IDCard</dd>
+
+          <dt>Key</dt>
+          <dd>Public key of the group IDCard</dd>
+
+          <dt>Status</dt>
+          <dd>Membership status ("valid" or "suspended")</dd>
+
+          <dt>Issued</dt>
+          <dd>Timestamp of membership issuance</dd>
+
+          <dt>Info</dt>
+          <dd>Metadata about the membership</dd>
+
+          <dt>SignKey</dt>
+          <dd>Public key used to sign the membership</dd>
+
+          <dt>Signature</dt>
+          <dd>Signature over the membership data</dd>
+        </dl>
+
+        <t>Memberships must be signed by a key with the "sign" purpose in the
+        group's IDCard.</t>
+      </section>
+
+      <section anchor="idcard-operations">
+        <name>IDCard Operations</name>
+
+        <section anchor="creating-an-idcard">
+          <name>Creating an IDCard</name>
+          <t>Creating a new IDCard:</t>
+
+          <ol>
+            <li>Marshal the public key in PKIX format</li>
+            <li>Set the Self field to the marshalled public key</li>
+            <li>Set Issued to the current time</li>
+            <li>Add the public key as a SubKey with the "sign" purpose</li>
+            <li>Initialize empty Revoke, Groups, and Meta fields</li>
+          </ol>
+        </section>
+
+        <section anchor="adding-keys">
+          <name>Adding Keys</name>
+          <t>Adding a key to an IDCard:</t>
+
+          <ol>
+            <li>Marshal the public key in PKIX format</li>
+            <li>Create a SubKey with the marshalled key</li>
+            <li>Set Issued to the current time</li>
+            <li>Set Purposes based on the key type and intended use</li>
+            <li>Optionally set an Expires time</li>
+            <li>Add the SubKey to the SubKeys list</li>
+          </ol>
+        </section>
+
+        <section anchor="signing-an-idcard">
+          <name>Signing an IDCard</name>
+          <t>An IDCard must be signed to be considered valid:</t>
+
+          <ol>
+            <li>Serialize the IDCard to CBOR</li>
+            <li>Create a Bottle with the serialized IDCard as Message</li>
+            <li>Set the content-type header to "idcard"</li>
+            <li>Bottle up the Bottle</li>
+            <li>Sign the Bottle using the primary key</li>
+            <li>Serialize the signed Bottle to CBOR</li>
+          </ol>
+        </section>
+
+        <section anchor="verifying-an-idcard">
+          <name>Verifying an IDCard</name>
+          <t>Verifying an IDCard:</t>
+
+          <ol>
+            <li>Parse the CBOR-encoded Bottle</li>
+            <li>Open the Bottle (no decryption needed)</li>
+            <li>Verify that at least one signature matches the IDCard's Self key</li>
+            <li>Decode the content as an IDCard</li>
+          </ol>
+        </section>
+      </section>
+    </section>
+
+    <section anchor="cbor-encoding">
+      <name>CBOR Encoding</name>
+      <t>This section defines the CBOR encoding for all protocol data types.
+      CBOR (Concise Binary Object Representation) is defined in <xref target="RFC8949"/>.</t>
+
+      <t>IMPORTANT: This protocol uses two distinct CBOR container types:</t>
+
+      <t>Arrays (CBOR major type 4):</t>
+      <ul>
+        <li>Elements are identified by position (index 0, 1, 2, ...)</li>
+        <li>All elements MUST be present in the specified order</li>
+        <li>Used for: Bottle, MessageRecipient, MessageSignature</li>
+        <li>Chosen for structures where all fields are always present</li>
+      </ul>
+
+      <t>Maps with Integer Keys (CBOR major type 5):</t>
+      <ul>
+        <li>Elements are identified by explicit integer keys</li>
+        <li>Keys may be omitted for optional fields</li>
+        <li>Order of keys is not significant</li>
+        <li>Used for: IDCard, SubKey, Membership</li>
+        <li>Chosen for structures with optional fields to optimize encoding
+        length (omitting a key-value pair is more compact than encoding
+        a null value at a fixed array position)</li>
+      </ul>
+
+      <t>Using the wrong container type will cause decoding failures.
+      Implementations MUST use arrays where specified and integer-keyed
+      maps where specified. An integer-keyed map is NOT interchangeable
+      with an array, even when keys are sequential integers starting at 0.</t>
+
+      <section anchor="bottle-cbor-encoding">
+        <name>Bottle CBOR Encoding (Array)</name>
+        <t>A Bottle is encoded as a CBOR array (major type 4) with 5 elements
+        in the following order:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Index</th>
+              <th>Field</th>
+              <th>CBOR Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>Header</td>
+              <td>map</td>
+              <td>String keys to any values</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>Message</td>
+              <td>byte string</td>
+              <td>Payload bytes</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Format</td>
+              <td>integer</td>
+              <td>MessageFormat enumeration</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Recipients</td>
+              <td>array</td>
+              <td>Array of MessageRecipient</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Signatures</td>
+              <td>array</td>
+              <td>Array of MessageSignature</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>Example CBOR diagnostic notation for an empty cleartext Bottle:</t>
+
+        <sourcecode type="cbor-diag">[{}, h'', 0, [], []]</sourcecode>
+      </section>
+
+      <section anchor="messagerecipient-cbor-encoding">
+        <name>MessageRecipient CBOR Encoding (Array)</name>
+        <t>A MessageRecipient is encoded as a CBOR array (major type 4) with
+        3 elements:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Index</th>
+              <th>Field</th>
+              <th>CBOR Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>Type</td>
+              <td>integer</td>
+              <td>Recipient type (0 = default)</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>Recipient</td>
+              <td>byte string</td>
+              <td>Public key in PKIX format</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Data</td>
+              <td>byte string</td>
+              <td>Encrypted key material</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>Example CBOR diagnostic notation:</t>
+
+        <sourcecode type="cbor-diag">[0, h'3082...', h'...encrypted_key...']</sourcecode>
+      </section>
+
+      <section anchor="messagesignature-cbor-encoding">
+        <name>MessageSignature CBOR Encoding (Array)</name>
+        <t>A MessageSignature is encoded as a CBOR array (major type 4) with
+        3 elements:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Index</th>
+              <th>Field</th>
+              <th>CBOR Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>Type</td>
+              <td>integer</td>
+              <td>Signature type (0 = default)</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>Signer</td>
+              <td>byte string</td>
+              <td>Public key in PKIX format</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Data</td>
+              <td>byte string</td>
+              <td>Signature value</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>Example CBOR diagnostic notation:</t>
+
+        <sourcecode type="cbor-diag">[0, h'3082...', h'...signature...']</sourcecode>
+      </section>
+
+      <section anchor="idcard-cbor-encoding">
+        <name>IDCard CBOR Encoding (Integer-Keyed Map)</name>
+        <t>An IDCard is encoded as a CBOR map (major type 5) with integer keys:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>CBOR Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Self</td>
+              <td>byte string</td>
+              <td>Primary public key (PKIX format)</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Issued</td>
+              <td>tag 0/1</td>
+              <td>RFC 3339 timestamp or Unix time</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>SubKeys</td>
+              <td>array</td>
+              <td>Array of SubKey structures</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Revoke</td>
+              <td>array</td>
+              <td>Array of revoked SubKey structures</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Groups</td>
+              <td>array</td>
+              <td>Array of Membership structures</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>Meta</td>
+              <td>map</td>
+              <td>String keys to string values</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>Example CBOR diagnostic notation:</t>
+
+        <sourcecode type="cbor-diag"><![CDATA[{
+  1: h'3082...',
+  2: 0("2025-03-15T10:30:00Z"),
+  3: [...],
+  4: [],
+  5: [],
+  6: {"name": "Alice"}
+}]]></sourcecode>
+      </section>
+
+      <section anchor="subkey-cbor-encoding">
+        <name>SubKey CBOR Encoding (Integer-Keyed Map)</name>
+        <t>A SubKey is encoded as a CBOR map (major type 5) with integer keys:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>CBOR Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Key</td>
+              <td>byte string</td>
+              <td>Public key in PKIX format</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Issued</td>
+              <td>tag 0/1</td>
+              <td>RFC 3339 timestamp or Unix time</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Expires</td>
+              <td>tag 0/1</td>
+              <td>Optional expiration timestamp</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Purposes</td>
+              <td>array</td>
+              <td>Array of text strings</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The Expires field (key 3) is omitted if no expiration is set.</t>
+
+        <t>Example CBOR diagnostic notation:</t>
+
+        <sourcecode type="cbor-diag"><![CDATA[{
+  1: h'3082...',
+  2: 0("2025-03-15T10:30:00Z"),
+  4: ["sign", "decrypt"]
+}]]></sourcecode>
+      </section>
+
+      <section anchor="membership-cbor-encoding">
+        <name>Membership CBOR Encoding (Integer-Keyed Map)</name>
+        <t>A Membership is encoded as a CBOR map (major type 5) with integer keys:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>CBOR Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Subject</td>
+              <td>byte string</td>
+              <td>Member's IDCard Self key</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Key</td>
+              <td>byte string</td>
+              <td>Group's IDCard Self key</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Status</td>
+              <td>text string</td>
+              <td>"valid" or "suspended"</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Issued</td>
+              <td>tag 0/1</td>
+              <td>RFC 3339 timestamp or Unix time</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Info</td>
+              <td>map</td>
+              <td>String keys to string values</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>SignKey</td>
+              <td>byte string</td>
+              <td>Signing key in PKIX format</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>Signature</td>
+              <td>byte string</td>
+              <td>Signature over membership data</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>When a Membership is stored within an IDCard's Groups array, the
+        Subject field (key 1) is omitted as it is redundant with the
+        containing IDCard's Self field.</t>
+
+        <t>Example CBOR diagnostic notation:</t>
+
+        <sourcecode type="cbor-diag"><![CDATA[{
+  1: h'3082...',
+  2: h'3082...',
+  3: "valid",
+  4: 0("2025-03-15T10:30:00Z"),
+  5: {"role": "member"},
+  6: h'3082...',
+  7: h'...signature...'
+}]]></sourcecode>
+      </section>
+    </section>
+
+    <section anchor="json-encoding">
+      <name>JSON Encoding</name>
+      <t>This section defines the JSON encoding for all protocol data types.
+      JSON encoding is provided for compatibility with web systems and
+      environments where CBOR support is limited. CBOR remains the
+      preferred encoding due to its compact binary representation.</t>
+
+      <t>All structures are encoded as JSON objects with string keys. Byte
+      strings (such as keys and signatures) are encoded as base64url
+      strings without padding (<xref target="RFC4648"/> Section 5). Timestamps are encoded
+      as RFC 3339 strings.</t>
+
+      <t>Fields marked as "omitempty" are omitted from the JSON output when
+      they contain their zero value (empty array, empty map, zero, etc.).</t>
+
+      <section anchor="bottle-json-encoding">
+        <name>Bottle JSON Encoding</name>
+        <t>A Bottle is encoded as a JSON object with the following fields:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>JSON Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"hdr"</td>
+              <td>Header</td>
+              <td>object</td>
+              <td>String keys to any values</td>
+            </tr>
+            <tr>
+              <td>"msg"</td>
+              <td>Message</td>
+              <td>string</td>
+              <td>Base64url-encoded payload</td>
+            </tr>
+            <tr>
+              <td>"fmt"</td>
+              <td>Format</td>
+              <td>number</td>
+              <td>MessageFormat enumeration</td>
+            </tr>
+            <tr>
+              <td>"dst"</td>
+              <td>Recipients</td>
+              <td>array</td>
+              <td>Array of MessageRecipient</td>
+            </tr>
+            <tr>
+              <td>"sig"</td>
+              <td>Signatures</td>
+              <td>array</td>
+              <td>Array of MessageSignature</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The "hdr", "dst", and "sig" fields are omitted when empty.</t>
+
+        <t>Example JSON:</t>
+
+        <sourcecode type="json"><![CDATA[{
+  "msg": "SGVsbG8gV29ybGQ",
+  "fmt": 0
+}]]></sourcecode>
+      </section>
+
+      <section anchor="messagerecipient-json-encoding">
+        <name>MessageRecipient JSON Encoding</name>
+        <t>A MessageRecipient is encoded as a JSON object:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>JSON Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"typ"</td>
+              <td>Type</td>
+              <td>number</td>
+              <td>Recipient type (0 = default)</td>
+            </tr>
+            <tr>
+              <td>"key"</td>
+              <td>Recipient</td>
+              <td>string</td>
+              <td>Base64url public key (PKIX)</td>
+            </tr>
+            <tr>
+              <td>"dat"</td>
+              <td>Data</td>
+              <td>string</td>
+              <td>Base64url encrypted key</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The "typ" field is omitted when zero.</t>
+
+        <t>Example JSON:</t>
+
+        <sourcecode type="json"><![CDATA[{
+  "key": "MIIBIjANBgkq...",
+  "dat": "encrypted_key_base64url"
+}]]></sourcecode>
+      </section>
+
+      <section anchor="messagesignature-json-encoding">
+        <name>MessageSignature JSON Encoding</name>
+        <t>A MessageSignature is encoded as a JSON object:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>JSON Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"typ"</td>
+              <td>Type</td>
+              <td>number</td>
+              <td>Signature type (0 = default)</td>
+            </tr>
+            <tr>
+              <td>"key"</td>
+              <td>Signer</td>
+              <td>string</td>
+              <td>Base64url public key (PKIX)</td>
+            </tr>
+            <tr>
+              <td>"dat"</td>
+              <td>Data</td>
+              <td>string</td>
+              <td>Base64url signature value</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The "typ" field is omitted when zero.</t>
+
+        <t>Example JSON:</t>
+
+        <sourcecode type="json"><![CDATA[{
+  "key": "MIIBIjANBgkq...",
+  "dat": "signature_base64url"
+}]]></sourcecode>
+      </section>
+
+      <section anchor="idcard-json-encoding">
+        <name>IDCard JSON Encoding</name>
+        <t>An IDCard is encoded as a JSON object:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>JSON Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"self"</td>
+              <td>Self</td>
+              <td>string</td>
+              <td>Base64url primary public key</td>
+            </tr>
+            <tr>
+              <td>"iss"</td>
+              <td>Issued</td>
+              <td>string</td>
+              <td>RFC 3339 timestamp</td>
+            </tr>
+            <tr>
+              <td>"sub"</td>
+              <td>SubKeys</td>
+              <td>array</td>
+              <td>Array of SubKey objects</td>
+            </tr>
+            <tr>
+              <td>"rev"</td>
+              <td>Revoke</td>
+              <td>array</td>
+              <td>Array of revoked SubKey objects</td>
+            </tr>
+            <tr>
+              <td>"grp"</td>
+              <td>Groups</td>
+              <td>array</td>
+              <td>Array of Membership objects</td>
+            </tr>
+            <tr>
+              <td>"meta"</td>
+              <td>Meta</td>
+              <td>object</td>
+              <td>String keys to string values</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>Example JSON:</t>
+
+        <sourcecode type="json"><![CDATA[{
+  "self": "MIIBIjANBgkq...",
+  "iss": "2025-03-15T10:30:00Z",
+  "sub": [...],
+  "rev": [],
+  "grp": [],
+  "meta": {"name": "Alice"}
+}]]></sourcecode>
+      </section>
+
+      <section anchor="subkey-json-encoding">
+        <name>SubKey JSON Encoding</name>
+        <t>A SubKey is encoded as a JSON object:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>JSON Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"key"</td>
+              <td>Key</td>
+              <td>string</td>
+              <td>Base64url public key (PKIX)</td>
+            </tr>
+            <tr>
+              <td>"iss"</td>
+              <td>Issued</td>
+              <td>string</td>
+              <td>RFC 3339 timestamp</td>
+            </tr>
+            <tr>
+              <td>"exp"</td>
+              <td>Expires</td>
+              <td>string</td>
+              <td>RFC 3339 timestamp (optional)</td>
+            </tr>
+            <tr>
+              <td>"pur"</td>
+              <td>Purposes</td>
+              <td>array</td>
+              <td>Array of purpose strings</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>The "exp" field is omitted if no expiration is set.</t>
+
+        <t>Example JSON:</t>
+
+        <sourcecode type="json"><![CDATA[{
+  "key": "MIIBIjANBgkq...",
+  "iss": "2025-03-15T10:30:00Z",
+  "pur": ["sign", "decrypt"]
+}]]></sourcecode>
+      </section>
+
+      <section anchor="membership-json-encoding">
+        <name>Membership JSON Encoding</name>
+        <t>A Membership is encoded as a JSON object:</t>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Field</th>
+              <th>JSON Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"sub"</td>
+              <td>Subject</td>
+              <td>string</td>
+              <td>Base64url member's Self key</td>
+            </tr>
+            <tr>
+              <td>"key"</td>
+              <td>Key</td>
+              <td>string</td>
+              <td>Base64url group's Self key</td>
+            </tr>
+            <tr>
+              <td>"sta"</td>
+              <td>Status</td>
+              <td>string</td>
+              <td>"valid" or "suspended"</td>
+            </tr>
+            <tr>
+              <td>"iss"</td>
+              <td>Issued</td>
+              <td>string</td>
+              <td>RFC 3339 timestamp</td>
+            </tr>
+            <tr>
+              <td>"nfo"</td>
+              <td>Info</td>
+              <td>object</td>
+              <td>String keys to string values</td>
+            </tr>
+            <tr>
+              <td>"sky"</td>
+              <td>SignKey</td>
+              <td>string</td>
+              <td>Base64url signing key (PKIX)</td>
+            </tr>
+            <tr>
+              <td>"sig"</td>
+              <td>Signature</td>
+              <td>string</td>
+              <td>Base64url signature value</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>When a Membership is stored within an IDCard's Groups array, the
+        "sub" field is omitted as it is redundant with the containing
+        IDCard's "self" field.</t>
+
+        <t>Example JSON:</t>
+
+        <sourcecode type="json"><![CDATA[{
+  "sub": "MIIBIjANBgkq...",
+  "key": "MIIBCgKCAQEA...",
+  "sta": "valid",
+  "iss": "2025-03-15T10:30:00Z",
+  "nfo": {"role": "member"},
+  "sky": "MIIBIjANBgkq...",
+  "sig": "signature_base64url"
+}]]></sourcecode>
+      </section>
+    </section>
+
+    <section anchor="protocol-integration">
+      <name>Protocol Integration</name>
+      <t>The Bottle and IDCard protocols can be integrated with existing
+      applications and protocols:</t>
+
+      <t>HTTP Integration:</t>
+      <ul>
+        <li>Bottles can be transmitted as HTTP request/response bodies</li>
+        <li>Content-Type headers can indicate the encoding (application/cbor
+        or application/json)</li>
+        <li>HTTP authentication can be implemented using IDCard signatures</li>
+      </ul>
+
+      <t>Storage Systems:</t>
+      <ul>
+        <li>Bottles provide a secure container for storing sensitive data</li>
+        <li>Data can be encrypted for multiple recipients</li>
+        <li>Access control can be implemented using IDCards and Memberships</li>
+      </ul>
+
+      <t>Key Distribution:</t>
+      <ul>
+        <li>IDCards provide a mechanism for distributing public keys</li>
+        <li>SubKeys with different purposes allow for key separation</li>
+        <li>Signed IDCards ensure the authenticity of public keys</li>
+      </ul>
+
+      <t>Group Management:</t>
+      <ul>
+        <li>Memberships allow for creating and managing groups</li>
+        <li>Group membership can be verified cryptographically</li>
+        <li>Revocation of group membership is supported</li>
+      </ul>
+    </section>
+
+    <section anchor="IANA">
+      <name>IANA Considerations</name>
+      <t>This memo includes no request to IANA.</t>
+    </section>
+
+    <section anchor="Security">
+      <name>Security Considerations</name>
+      <t>This section discusses security considerations for implementations
+      of the Bottle and IDCard protocols.</t>
+
+      <section anchor="security-threat-model">
+        <name>Threat Model</name>
+        <t>The Bottle protocol is designed to provide confidentiality and
+        authenticity for messages in transit and at rest. It protects against
+        passive eavesdroppers who cannot decrypt messages without access to
+        a recipient's private key, and against message tampering through
+        authenticated encryption (AES-GCM) and digital signatures.</t>
+
+        <t>The protocol does NOT provide protection against:</t>
+        <ul>
+          <li>Compromise of private keys</li>
+          <li>Traffic analysis (message sizes and timing are observable)</li>
+          <li>Denial of service attacks</li>
+          <li>Attacks on the underlying cryptographic primitives</li>
+        </ul>
+      </section>
+
+      <section anchor="security-nonce">
+        <name>Nonce Requirements</name>
+        <t>AES-GCM requires a unique nonce for each encryption operation
+        with the same key. Nonce reuse with the same key is catastrophic:
+        it allows an attacker to recover the XOR of plaintexts and forge
+        authentication tags. Implementations MUST generate a fresh random
+        nonce for each encryption operation. The nonce is 12 bytes and
+        SHOULD be generated using a cryptographically secure random number
+        generator.</t>
+      </section>
+
+      <section anchor="security-forward-secrecy">
+        <name>Forward Secrecy</name>
+        <t>This protocol does not provide forward secrecy. If a recipient's
+        private key is compromised, an attacker can decrypt all past messages
+        encrypted to that key. Applications requiring forward secrecy should
+        implement key rotation mechanisms or use ephemeral key exchange
+        protocols in conjunction with Bottle.</t>
+      </section>
+
+      <section anchor="security-replay">
+        <name>Replay Protection</name>
+        <t>The Bottle protocol does not include built-in replay protection.
+        Applications that require replay protection SHOULD include timestamps,
+        sequence numbers, or unique message identifiers in the message header
+        or payload and implement appropriate validation logic.</t>
+      </section>
+
+      <section anchor="security-metadata">
+        <name>Metadata Protection</name>
+        <t>The Header field of a Bottle is not encrypted unless the Bottle
+        is nested within another encrypted Bottle ("bottled up"). Applications
+        that require header confidentiality MUST use the bottling up operation
+        before encryption. Additionally, the Recipients field exposes the
+        public keys of all intended recipients, which may reveal information
+        about the communication parties.</t>
+      </section>
+
+      <section anchor="security-signatures">
+        <name>Signature Security</name>
+        <t>Implementations MUST verify all signatures before trusting message
+        content. Signature verification SHOULD be performed using constant-time
+        comparison functions to prevent timing attacks. When multiple signatures
+        are present, applications should define policies for which signatures
+        are required versus optional.</t>
+
+        <t>IDCards MUST be verified to be self-signed by their primary key
+        before trusting any associated SubKeys or Memberships.</t>
+      </section>
+
+      <section anchor="security-key-management">
+        <name>Key Management</name>
+        <t>Private keys MUST be stored securely and protected from unauthorized
+        access. Memory containing sensitive key material SHOULD be cleared
+        immediately after use. Applications SHOULD implement secure key
+        generation using cryptographically secure random number generators.</t>
+
+        <t>When converting between key types (e.g., Ed25519 to X25519 for
+        encryption), implementations MUST use well-established conversion
+        methods. Incorrect conversion can compromise security.</t>
+      </section>
+
+      <section anchor="security-idcard-trust">
+        <name>IDCard Trust Model</name>
+        <t>This specification does not define how trust in IDCards is
+        established. Applications MUST define their own trust model, which
+        may include:</t>
+        <ul>
+          <li>Trust on first use (TOFU)</li>
+          <li>Web of trust through Membership signatures</li>
+          <li>Out-of-band verification of IDCard fingerprints</li>
+          <li>Integration with existing PKI systems</li>
+        </ul>
+
+        <t>Applications MUST check SubKey expiration times before use and
+        MUST NOT use keys that appear in the Revoke list. Purpose restrictions
+        on SubKeys MUST be enforced: a key with only the "sign" purpose MUST
+        NOT be used for decryption, and vice versa.</t>
+      </section>
+
+      <section anchor="security-algorithm-agility">
+        <name>Algorithm Considerations</name>
+        <t>This protocol supports any cryptographic algorithm whose public keys
+        can be encoded in PKIX format, including traditional algorithms (RSA,
+        ECDSA, Ed25519, X25519) and post-quantum algorithms (ML-KEM, ML-DSA,
+        SLH-DSA). While algorithm agility provides flexibility and enables
+        migration to post-quantum cryptography, it also increases implementation
+        complexity and attack surface. Implementations SHOULD support a minimal
+        set of algorithms appropriate for their use case.</t>
+
+        <t>For new deployments, implementations SHOULD prefer modern algorithms
+        (Ed25519, X25519) over legacy options. Applications with long-term
+        security requirements SHOULD consider post-quantum algorithms or hybrid
+        approaches combining traditional and post-quantum cryptography.</t>
+      </section>
+    </section>
+
+  </middle>
+
+  <back>
+    <references>
+      <name>References</name>
+      <references>
+        <name>Normative References</name>
+
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.4648.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.5280.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8949.xml"/>
+
+      </references>
+
+      <references>
+        <name>Informative References</name>
+
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.4880.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7519.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8032.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7748.xml"/>
+
+      </references>
+    </references>
+
+    <section anchor="Acknowledgements" numbered="false">
+      <name>Acknowledgements</name>
+      <t>The author would like to thank the contributors to the cryptographic
+      community for their insights and feedback on secure container formats
+      and identity management.</t>
+    </section>
+
+ </back>
+</rfc>

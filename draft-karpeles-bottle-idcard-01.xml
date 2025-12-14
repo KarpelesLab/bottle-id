@@ -170,7 +170,7 @@
           <dd>A nested Bottle encoded using CBOR.</dd>
 
           <dt>AES (2)</dt>
-          <dd>An AES-GCM encrypted CBOR Bottle.</dd>
+          <dd>An AES-256-GCM encrypted CBOR Bottle.</dd>
 
           <dt>JsonBottle (3)</dt>
           <dd>A nested Bottle encoded using JSON.</dd>
@@ -180,6 +180,11 @@
         based on the application requirements. CBOR is the preferred encoding
         due to its compact binary representation, while JSON provides better
         compatibility with web systems.</t>
+
+        <t>The Format field is extensible. Future specifications MAY define
+        additional format values for other encryption algorithms (e.g., AES Key
+        Wrap, ChaCha20-Poly1305, or other AEAD constructions). Implementations
+        MUST reject messages with unrecognized Format values.</t>
       </section>
 
       <section anchor="bottle-structure">
@@ -1383,38 +1388,45 @@
 
       <section anchor="alg-content-encryption">
         <name>Content Encryption Algorithms</name>
-        <t>Content encryption in Bottle uses Authenticated Encryption with
-        Associated Data (AEAD) algorithms. The default and RECOMMENDED
-        algorithm is AES-GCM with a 256-bit key.</t>
+        <t>The Format field of a Bottle determines the content encryption
+        algorithm. When Format is AES (2), the content is encrypted using
+        AES-256-GCM. Future format values MAY specify alternative AEAD
+        algorithms such as AES Key Wrap, ChaCha20-Poly1305, or Key Encryption
+        Key (KEK) derivation schemes.</t>
+
+        <t>The following table lists content encryption algorithms and their
+        corresponding Format values:</t>
 
         <table anchor="aead-algs-table">
-          <name>Content Encryption Algorithms</name>
+          <name>Content Encryption Algorithms by Format</name>
           <thead>
             <tr>
+              <th>Format</th>
               <th>Algorithm</th>
               <th>Key Size</th>
               <th>Nonce Size</th>
               <th>Tag Size</th>
-              <th>Description</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>AES-128-GCM</td>
-              <td>128 bits</td>
-              <td>96 bits</td>
-              <td>128 bits</td>
-              <td>AES-GCM with 128-bit key</td>
-            </tr>
-            <tr>
+              <td>2 (AES)</td>
               <td>AES-256-GCM</td>
               <td>256 bits</td>
               <td>96 bits</td>
               <td>128 bits</td>
-              <td>AES-GCM with 256-bit key (RECOMMENDED)</td>
             </tr>
           </tbody>
         </table>
+
+        <t>Additional format values and algorithms may be defined in future
+        specifications. Possible extensions include:</t>
+        <ul>
+          <li>AES-128-GCM for constrained environments</li>
+          <li>ChaCha20-Poly1305 for software implementations</li>
+          <li>AES Key Wrap (RFC 3394) for key-only encryption</li>
+          <li>KEK derivation schemes using HKDF or similar</li>
+        </ul>
 
         <t>The Message field of an encrypted Bottle contains the concatenation
         of the nonce and the ciphertext (which includes the authentication tag):</t>
@@ -1716,6 +1728,61 @@ Where:
           </dl>
         </section>
       </section>
+
+      <section anchor="iana-format-registry">
+        <name>Bottle Format Registry</name>
+        <t>IANA is requested to create a new registry called "Bottle Format Values"
+        with the following initial contents:</t>
+
+        <table anchor="iana-format-table">
+          <name>Bottle Format Values</name>
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>0</td>
+              <td>ClearText</td>
+              <td>Raw, unencrypted data</td>
+              <td>This document</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>CborBottle</td>
+              <td>Nested Bottle encoded using CBOR</td>
+              <td>This document</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>AES</td>
+              <td>AES-256-GCM encrypted CBOR Bottle</td>
+              <td>This document</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>JsonBottle</td>
+              <td>Nested Bottle encoded using JSON</td>
+              <td>This document</td>
+            </tr>
+            <tr>
+              <td>4-255</td>
+              <td>Unassigned</td>
+              <td>Reserved for future encryption algorithms</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <t>New assignments in this registry require Specification Required
+        <xref target="RFC8126"/>. Values 4-255 are reserved for future content
+        encryption algorithms (e.g., AES Key Wrap, ChaCha20-Poly1305, KEK
+        derivation schemes).</t>
+      </section>
     </section>
 
     <section anchor="Security">
@@ -1848,6 +1915,7 @@ Where:
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.4648.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.5280.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8126.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8949.xml"/>
 
       </references>

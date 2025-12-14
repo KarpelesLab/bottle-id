@@ -481,8 +481,8 @@
           <t>Creating a new IDCard:</t>
 
           <ol>
-            <li>Marshal the public key in PKIX format</li>
-            <li>Set the Self field to the marshalled public key</li>
+            <li>Encode the public key in PKIX format</li>
+            <li>Set the Self field to the encoded public key</li>
             <li>Set Issued to the current time</li>
             <li>Add the public key as a SubKey with the "sign" purpose</li>
             <li>Initialize empty Revoke, Groups, and Meta fields</li>
@@ -494,8 +494,8 @@
           <t>Adding a key to an IDCard:</t>
 
           <ol>
-            <li>Marshal the public key in PKIX format</li>
-            <li>Create a SubKey with the marshalled key</li>
+            <li>Encode the public key in PKIX format</li>
+            <li>Create a SubKey with the encoded key</li>
             <li>Set Issued to the current time</li>
             <li>Set Purposes based on the key type and intended use</li>
             <li>Optionally set an Expires time</li>
@@ -903,8 +903,8 @@
       strings without padding (<xref target="RFC4648"/> Section 5). Timestamps are encoded
       as RFC 3339 strings.</t>
 
-      <t>Fields marked as "omitempty" are omitted from the JSON output when
-      they contain their zero value (empty array, empty map, zero, etc.).</t>
+      <t>Optional fields are omitted from the JSON output when they contain
+      their zero value (empty array, empty map, zero, etc.).</t>
 
       <section anchor="bottle-json-encoding">
         <name>Bottle JSON Encoding</name>

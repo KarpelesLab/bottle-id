@@ -589,9 +589,9 @@ Internet-Draft              Bottle and IDCard              December 2025
 
    Creating a new IDCard:
 
-   1.  Marshal the public key in PKIX format
+   1.  Encode the public key in PKIX format
 
-   2.  Set the Self field to the marshalled public key
+   2.  Set the Self field to the encoded public key
 
    3.  Set Issued to the current time
 
@@ -603,9 +603,9 @@ Internet-Draft              Bottle and IDCard              December 2025
 
    Adding a key to an IDCard:
 
-   1.  Marshal the public key in PKIX format
+   1.  Encode the public key in PKIX format
 
-   2.  Create a SubKey with the marshalled key
+   2.  Create a SubKey with the encoded key
 
    3.  Set Issued to the current time
 
@@ -910,8 +910,8 @@ Internet-Draft              Bottle and IDCard              December 2025
    strings without padding ([RFC4648] Section 5).  Timestamps are
    encoded as RFC 3339 strings.
 
-   Fields marked as "omitempty" are omitted from the JSON output when
-   they contain their zero value (empty array, empty map, zero, etc.).
+   Optional fields are omitted from the JSON output when they contain
+   their zero value (empty array, empty map, zero, etc.).
 
 6.1.  Bottle JSON Encoding
 

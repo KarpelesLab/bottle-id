@@ -145,7 +145,7 @@ Internet-Draft              Bottle and IDCard              December 2025
    limitations: they support only a single signature per token, JSON
    encoding becomes verbose for binary data, and there is no standard
    mechanism for nested encryption or signing operations.  At the other
-   extreme, the OpenPGP Message Format [RFC4880] provides comprehensive
+   extreme, the OpenPGP Message Format [RFC9580] provides comprehensive
    cryptographic features including multiple signatures, encryption for
    multiple recipients, and sophisticated key management, but its
    complexity and legacy design choices have limited adoption outside
@@ -1359,10 +1359,9 @@ Internet-Draft              Bottle and IDCard              December 2025
 
 10.2.  Informative References
 
-   [RFC4880]  Callas, J., Donnerhacke, L., Finney, H., Shaw, D., and R.
-              Thayer, "OpenPGP Message Format", RFC 4880,
-              DOI 10.17487/RFC4880, November 2007,
-              <https://www.rfc-editor.org/info/rfc4880>.
+   [RFC9580]  Wouters, P., Ed., Huigens, D., Winter, J., and Y. Niibe,
+              "OpenPGP", RFC 9580, DOI 10.17487/RFC9580, July 2024,
+              <https://www.rfc-editor.org/info/rfc9580>.
 
    [RFC7519]  Jones, M., Bradley, J., and N. Sakimura, "JSON Web Token
               (JWT)", RFC 7519, DOI 10.17487/RFC7519, May 2015,
@@ -1387,6 +1386,7 @@ Author's Address
 
    Mark Karpelès
    Karpelès Lab Inc
+   Tokyo
    Japan
    Email: mark@klb.jp
    URI:   https://klb.jp

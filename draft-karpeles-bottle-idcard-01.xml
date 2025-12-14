@@ -28,7 +28,7 @@
       <organization>Karpelès Lab Inc</organization>
       <address>
         <postal>
-          <city>Tokyo</city>
+          <region>Tokyo</region>
           <country>JP</country>
         </postal>
         <email>mark@klb.jp</email>
@@ -79,7 +79,7 @@
       limitations: they support only a single signature per token, JSON
       encoding becomes verbose for binary data, and there is no standard
       mechanism for nested encryption or signing operations. At the other
-      extreme, the OpenPGP Message Format <xref target="RFC4880"/> provides
+      extreme, the OpenPGP Message Format <xref target="RFC9580"/> provides
       comprehensive cryptographic features including multiple signatures,
       encryption for multiple recipients, and sophisticated key management,
       but its complexity and legacy design choices have limited adoption
@@ -1424,7 +1424,7 @@
       <references>
         <name>Informative References</name>
 
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.4880.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9580.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7519.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8032.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7748.xml"/>

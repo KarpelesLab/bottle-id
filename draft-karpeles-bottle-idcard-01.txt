@@ -1710,21 +1710,21 @@ Internet-Draft              Bottle and IDCard              December 2025
       | 3     | JsonBottle | Nested Bottle encoded | This document |
       |       |            | using JSON            |               |
       +-------+------------+-----------------------+---------------+
-      | 4-255 | Unassigned | Reserved for future   |               |
-      |       |            | encryption algorithms |               |
-      +-------+------------+-----------------------+---------------+
 
                       Table 16: Bottle Format Values
 
-   New assignments in this registry require Specification Required
-   [RFC8126].  Values 4-255 are reserved for future content encryption
-   algorithms (e.g., AES Key Wrap, ChaCha20-Poly1305, KEK derivation
-   schemes).
+   The Format field is encoded as a CBOR integer, which has no upper
+   bound.  New assignments in this registry require Specification
+   Required [RFC8126].  Future registrations may define additional
+   content encryption algorithms (e.g., AES Key Wrap, ChaCha20-Poly1305,
+   KEK derivation schemes).
 
 11.  Security Considerations
 
    This section discusses security considerations for implementations of
    the Bottle and IDCard protocols.
+
+
 
 
 

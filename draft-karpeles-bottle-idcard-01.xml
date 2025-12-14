@@ -49,17 +49,18 @@
     <abstract>
       <t>This document specifies the Bottle and IDCard protocols for secure
       message encapsulation and cryptographic identity management. These
-      protocols aim to bridge the gap between JSON Web Tokens (JWT), which
-      are limited to a single signature and can become large when encoding
-      custom data, and Pretty Good Privacy (PGP), which offers comprehensive
-      features but is often considered cumbersome for modern applications.
-      The Bottle protocol defines a container format supporting multi-recipient
-      encryption, multiple digital signatures, and nested containers that enable
-      complex security arrangements such as sign-then-encrypt. The IDCard
-      protocol provides a structure for managing cryptographic identities with
-      purpose-specific subkeys and verifiable group memberships. Both protocols
-      specify encodings in Concise Binary Object Representation (CBOR) for
-      efficiency and JSON for web compatibility.</t>
+      protocols provide a unified message structure with support for recursive
+      nesting, addressing limitations in existing standards: JSON Web Tokens
+      (JWT) support only single signatures, CBOR Object Signing and Encryption
+      (COSE) uses separate structures for different operations without built-in
+      nesting, and Pretty Good Privacy (PGP) offers comprehensive features but
+      is often considered cumbersome. The Bottle protocol defines a single
+      container format supporting multi-recipient encryption, multiple digital
+      signatures, and arbitrarily nested containers that enable complex security
+      arrangements such as sign-then-encrypt. The IDCard protocol provides
+      identity management with purpose-specific subkeys and verifiable group
+      memberships. Both protocols specify encodings in CBOR for efficiency and
+      JSON for web compatibility.</t>
     </abstract>
 
   </front>
@@ -73,22 +74,30 @@
       through signatures, and manage cryptographic identities with different
       keys for different purposes.</t>
 
-      <t>Existing solutions occupy two extremes. JSON Web Tokens (JWT)
-      <xref target="RFC7519"/> and the broader JOSE (JSON Object Signing and
-      Encryption) standards are widely adopted in web applications but have
-      limitations: they support only a single signature per token, JSON
-      encoding becomes verbose for binary data, and there is no standard
-      mechanism for nested encryption or signing operations. At the other
-      extreme, the OpenPGP Message Format <xref target="RFC9580"/> provides
-      comprehensive cryptographic features including multiple signatures,
-      encryption for multiple recipients, and sophisticated key management,
-      but its complexity and legacy design choices have limited adoption
-      outside specific communities.</t>
+      <t>Existing solutions occupy different points in the design space. JSON
+      Web Tokens (JWT) <xref target="RFC7519"/> and the broader JOSE (JSON
+      Object Signing and Encryption) standards are widely adopted in web
+      applications but have limitations: they support only a single signature
+      per token, JSON encoding becomes verbose for binary data, and there is
+      no standard mechanism for nested encryption or signing operations.
+      CBOR Object Signing and Encryption (COSE) <xref target="RFC9052"/>
+      addresses the binary encoding issue and supports multiple recipients,
+      but uses separate message structures for signing, encryption, and MAC
+      operations, and does not provide built-in support for nested security
+      layers. At the other extreme, the OpenPGP Message Format
+      <xref target="RFC9580"/> provides comprehensive cryptographic features
+      including multiple signatures, encryption for multiple recipients, and
+      sophisticated key management, but its complexity and legacy design
+      choices have limited adoption outside specific communities.</t>
 
-      <t>The Bottle and IDCard protocols aim to bridge this gap by providing
-      a modern, flexible framework that combines the approachability of
-      JWT-style systems with capabilities closer to PGP, while using
-      efficient binary encoding.</t>
+      <t>The Bottle and IDCard protocols aim to occupy a middle ground by
+      providing a unified message structure that supports recursive nesting,
+      enabling complex security arrangements (such as sign-then-encrypt or
+      multi-layer encryption) through a simple, composable design. Unlike
+      COSE, which requires different structures for different operations,
+      Bottle uses a single structure type that can be nested arbitrarily.
+      The IDCard protocol adds identity management capabilities not found
+      in COSE or JOSE.</t>
 
       <t>The Bottle protocol offers a container format that can encapsulate
       arbitrary data with multiple layers of encryption and signatures. It
@@ -528,6 +537,90 @@
             <li>Decode the content as an IDCard</li>
           </ol>
         </section>
+      </section>
+    </section>
+
+    <section anchor="relationship-to-cose">
+      <name>Relationship to COSE</name>
+      <t>CBOR Object Signing and Encryption (COSE) <xref target="RFC9052"/> is
+      an IETF standard that provides signing, encryption, and MAC operations
+      using CBOR encoding. Bottle shares several design goals with COSE but
+      takes a different architectural approach.</t>
+
+      <section anchor="cose-similarities">
+        <name>Similarities</name>
+        <t>Bottle and COSE share the following characteristics:</t>
+        <ul>
+          <li>Both use CBOR arrays as the primary message structure</li>
+          <li>Both support multiple recipients for encrypted messages</li>
+          <li>Both support multiple signatures on a single message</li>
+          <li>Both use authenticated encryption (AES-GCM) for content protection</li>
+          <li>Both provide header mechanisms for metadata</li>
+        </ul>
+      </section>
+
+      <section anchor="cose-differences">
+        <name>Key Differences</name>
+        <t>The main differences between Bottle and COSE are:</t>
+
+        <dl newline="true">
+          <dt>Unified vs. Separate Structures</dt>
+          <dd>COSE defines separate message types for different operations
+          (COSE_Sign, COSE_Sign1, COSE_Encrypt, COSE_Encrypt0, COSE_Mac,
+          COSE_Mac0). Bottle uses a single unified structure with a Format
+          field that indicates the content type. This simplifies implementation
+          and enables uniform processing.</dd>
+
+          <dt>Native Nesting Support</dt>
+          <dd>Bottle explicitly supports recursive nesting ("bottling up") as
+          a core operation. A Bottle can contain another Bottle, enabling
+          complex security arrangements like sign-then-encrypt or multi-layer
+          encryption for different recipient groups. While COSE messages can
+          technically be nested by placing one inside another's payload, this
+          is not a defined operation with standardized semantics.</dd>
+
+          <dt>Identity Management</dt>
+          <dd>Bottle includes the IDCard protocol for managing cryptographic
+          identities with purpose-specific subkeys and group memberships.
+          COSE does not include identity management; it focuses solely on
+          message security operations.</dd>
+
+          <dt>Header Protection</dt>
+          <dd>COSE explicitly separates protected and unprotected header
+          buckets at each layer. Bottle uses a single Header map that becomes
+          protected when the Bottle is nested inside an encrypted outer
+          Bottle.</dd>
+
+          <dt>Key Representation</dt>
+          <dd>COSE defines its own key format (COSE_Key). Bottle uses PKIX
+          format exclusively for public key representation, providing
+          interoperability with existing PKI systems.</dd>
+
+          <dt>MAC Operations</dt>
+          <dd>COSE includes dedicated MAC structures (COSE_Mac, COSE_Mac0).
+          Bottle does not include separate MAC operations, relying instead
+          on signatures or the authentication provided by AES-GCM encryption.</dd>
+        </dl>
+      </section>
+
+      <section anchor="cose-when-to-use">
+        <name>When to Use Each Protocol</name>
+        <t>Consider using COSE when:</t>
+        <ul>
+          <li>Interoperability with existing COSE implementations is required</li>
+          <li>MAC-only operations are needed without encryption</li>
+          <li>Fine-grained control over protected vs. unprotected headers is required</li>
+          <li>Operating in constrained IoT environments where COSE is already deployed</li>
+        </ul>
+
+        <t>Consider using Bottle when:</t>
+        <ul>
+          <li>Complex nested security arrangements are needed (sign-then-encrypt, multi-layer encryption)</li>
+          <li>Identity management with purpose-specific keys is required</li>
+          <li>A simpler, unified message structure is preferred</li>
+          <li>Both CBOR and JSON encoding options are needed</li>
+          <li>Integration with PKIX-based key infrastructure is desired</li>
+        </ul>
       </section>
     </section>
 
@@ -1424,8 +1517,9 @@
       <references>
         <name>Informative References</name>
 
-        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9580.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7519.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9052.xml"/>
+        <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9580.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8032.xml"/>
         <xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.7748.xml"/>
 
